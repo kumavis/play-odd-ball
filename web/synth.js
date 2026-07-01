@@ -30,6 +30,7 @@ class AudioEngine {
   static get INSTRUMENTS() {
     return [
       { key: "bass", label: "Alien bass" },
+      { key: "engine", label: "Revving engine" },
       { key: "thunder", label: "Thunderstorm" },
       { key: "rain", label: "Rainfall" },
       { key: "theremin", label: "Theremin" },
@@ -82,6 +83,7 @@ class AudioEngine {
     this.master.connect(ctx.destination);
 
     this.voices.bass = this._buildBass();
+    this.voices.engine = this._buildEngine();
     this.voices.thunder = this._buildThunder();
     this.voices.rain = this._buildRain();
     this.voices.theremin = this._buildTheremin();
@@ -176,6 +178,64 @@ class AudioEngine {
       filter.frequency.value = 180 + v * 1600;
       amLfo.frequency.value = 4 + v * 14;
       vibLfo.frequency.value = 4 + v * 6;
+    };
+    return voice;
+  }
+
+  // Revving combustion engine. The value is the throttle: it drives the firing
+  // rate (RPM) so pitch climbs as you rev, an amplitude "chug" locked to that
+  // rate (deep putt-putt at idle -> smooth roar high up), a distorted saw core
+  // for combustion grit, an exhaust-noise bed, and a lowpass that opens up with
+  // throttle. RPM chases its target with a little lag so it spins up/down.
+  _buildEngine() {
+    const ctx = this.ctx, t = ctx.currentTime, idleHz = 32, maxHz = 178;
+    const out = this._out();
+
+    const mix = ctx.createGain(); mix.gain.value = 0.4;
+    const o1 = ctx.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = idleHz;
+    const o2 = ctx.createOscillator(); o2.type = "sawtooth"; o2.frequency.value = idleHz; o2.detune.value = 14;
+    const sub = ctx.createOscillator(); sub.type = "sine"; sub.frequency.value = idleHz / 2;
+    const subG = ctx.createGain(); subG.gain.value = 0.5;
+    o1.connect(mix); o2.connect(mix); sub.connect(subG).connect(mix);
+    o1.start(t); o2.start(t); sub.start(t);
+
+    // Exhaust grit: lowpassed noise mixed in, louder with throttle.
+    const noiseLp = ctx.createBiquadFilter(); noiseLp.type = "lowpass"; noiseLp.frequency.value = 1400;
+    const noiseGain = ctx.createGain(); noiseGain.gain.value = 0;
+    this._loopNoise(noiseLp); noiseLp.connect(noiseGain).connect(mix);
+
+    // Combustion distortion.
+    const shaper = ctx.createWaveShaper(); shaper.curve = this._shaper(6);
+
+    // Amplitude "chug" locked to the firing rate.
+    const am = ctx.createGain(); am.gain.value = 1;
+    const amLfo = ctx.createOscillator(); amLfo.type = "sawtooth"; amLfo.frequency.value = idleHz;
+    const amDepth = ctx.createGain(); amDepth.gain.value = 0.5;
+    amLfo.connect(amDepth).connect(am.gain); amLfo.start(t);
+
+    // Idle flutter so it doesn't sit dead still.
+    const flutter = ctx.createOscillator(); flutter.type = "sine"; flutter.frequency.value = 7;
+    const flutterDepth = ctx.createGain(); flutterDepth.gain.value = 4;
+    flutter.connect(flutterDepth); flutterDepth.connect(o1.detune); flutterDepth.connect(o2.detune); flutter.start(t);
+
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 500; lp.Q.value = 3;
+
+    mix.connect(shaper).connect(am).connect(lp).connect(out);
+
+    const voice = { out, level: 0, rpm: idleHz };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.06 + v * 0.5 : 0, 0.25, 0.09);
+      const targetRpm = idleHz + v * (maxHz - idleHz);
+      voice.rpm += (targetRpm - voice.rpm) * 0.15; // spin-up/down lag
+      const hz = voice.rpm;
+      o1.frequency.value = hz;
+      o2.frequency.value = hz;
+      sub.frequency.value = hz / 2;
+      amLfo.frequency.value = hz;              // chug tracks the firing rate
+      amDepth.gain.value = 0.55 - v * 0.42;    // deep at idle, smooth at high rev
+      lp.frequency.value = 350 + v * 4400;
+      noiseGain.gain.value = 0.05 + v * 0.22;
+      flutter.frequency.value = 6 + v * 4;
     };
     return voice;
   }
