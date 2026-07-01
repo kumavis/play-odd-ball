@@ -13,6 +13,14 @@ BLE MIDI devices do **not** appear in System Settings → Bluetooth. Pair throug
 
 Once connected it appears as a MIDI input named something like `ODD 1 Bluetooth`.
 
+### Skip the pairing dance in the web visualizer
+
+The web app in [`web/`](web/) can pair a ball directly over Web Bluetooth — no
+Audio MIDI Setup required. Open the page in Chrome or Edge (over HTTPS or
+`localhost`), click **🔵 Connect ball**, and pick your ODD Ball from the browser
+chooser. It streams straight into the visualizer. Balls already paired through
+Audio MIDI Setup still show up in the port dropdown as before.
+
 ## Setup
 
 ```bash

@@ -24,6 +24,7 @@
       <button id="clearPatch" class="tool-btn" title="Disconnect every instrument">🧹 Clear patch</button>
       <button id="saveProfile" class="tool-btn" title="Save the current movement→sound layout as a profile">💾 Save profile</button>
       <button id="soundToggle" class="sound-btn sound-btn--off">🔇 Sound off</button>
+      <button id="btBall" class="tool-btn" title="Pair an ODD Ball directly over Bluetooth — no macOS MIDI setup needed">🔵 Connect ball</button>
       <select id="portSelect" title="MIDI input port"></select>
       <span id="status" class="status status--off">disconnected</span>
       <span id="rate" class="rate">0 msg/s</span>
@@ -188,7 +189,7 @@
   </div>
 
   <div id="hint" class="hint">
-    <p><strong>Web MIDI permission needed.</strong> Use Chrome or Edge, pick the <code>ODD 1 Bluetooth</code> port above, then bounce / shake / spin the ball.</p>
+    <p><strong>Connect a ball.</strong> Click <code>🔵 Connect ball</code> to pair over Bluetooth right here (Chrome or Edge) — no macOS MIDI setup needed. Already paired in <em>Audio MIDI Setup</em>? Pick its port above instead. Then bounce / shake / spin the ball.</p>
   </div>
 
   <script src="synth.js?v=21"></script>
