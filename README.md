@@ -23,6 +23,8 @@ Audio MIDI Setup still show up in the port dropdown as before.
 
 ## Setup
 
+Requires Python **3.10+** (`listen.py` uses modern type syntax).
+
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
@@ -53,6 +55,7 @@ Per the [ODD MIDI docs](https://oddballism.com/en-ww/pages/midi):
 
 The ball also sends concrete note/CC numbers on **channel 1** (Note 0/1/2 =
 Tap/Shake/Twist; CC0–2 = Shake/Twist/Freefall; **CC3–5 = X/Y/Z orientation**;
-CC6 = Movement). It emits **CC7**, which is MIDI Volume and can mute a DAW — both
-tools here filter it. See [`docs/MIDI.md`](docs/MIDI.md) for the full reference,
-sources, and how to verify the mapping against your own ball.
+CC6 = Movement). It emits **CC7**, which is MIDI Volume and can mute a DAW — the
+web app drops it and `listen.py` flags it in the output. See
+[`docs/MIDI.md`](docs/MIDI.md) for the full reference, sources, and how to
+verify the mapping against your own ball.
