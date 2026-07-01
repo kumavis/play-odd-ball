@@ -152,12 +152,26 @@ const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
 // extreme angle (e.g. through an arm-slingshot wind-up) and so can never mark
 // the move as finished. Delta-based activity stays low while the ball is held
 // still at any angle and spikes on the actual throw / snap / catch.
-const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // all gesture CCs (shake/twist/freefall + X/Y/Z orient + movement)
+// A gesture is recognized from the ball's ORIENTATION trajectory only: the
+// X/Y/Z axes (CC3/4/5, see docs/MIDI.md). Those trace a smooth, repeatable path
+// through a move, which is exactly what DTW template-matching needs.
+//
+// The other CCs — Shake (CC0), Twist (CC1), Freefall (CC2), Movement (CC6) —
+// are event/intensity signals, not pose. Shake and Twist even double as Note
+// triggers, so they arrive as erratic bursts whose magnitude depends on how
+// hard you moved rather than the shape of the move. Feeding them into the
+// matcher added run-to-run noise to every DTW comparison and, on a vigorous
+// move, their large swings could set the shared normalization scale and crush
+// the discriminative orientation axes. Excluding them keeps recognition tied to
+// the pose path. (They remain available as modulation sources in the patch bay;
+// they're just not used to identify a move.)
+const GEST_DIMS = [3, 4, 5]; // X / Y / Z orientation (CC3-5)
 const GEST_CHANNELS = new Set(GEST_DIMS); // fast lookup for the message handler
 // The PARAMS keys those dims are stored under in a recorded session file, in
 // the same order — used to rebuild feature frames when importing a session.
-const GEST_DIM_KEYS = ["shake", "twist", "freefall", "tilt_x", "tilt_y", "tilt_z", "movement"];
+const GEST_DIM_KEYS = ["tilt_x", "tilt_y", "tilt_z"];
 const GEST_N = 32;                        // template length after resampling
+const DTW_BAND = 0.15;                    // Sakoe-Chiba radius as a fraction of length
 const RAW_N = 96;                         // stored raw resolution (for editing/crop)
 const GEST_ACT_TAU = 0.15;                // s; smoothing for the activity signal
 const SEG_START = 4.0;                    // activity (Σ|Δfeat|/s) that begins a move
@@ -166,6 +180,10 @@ const SEG_HOLD = 400;                     // ms below SEG_END that ends a move
 const SEG_PREROLL = 320;                  // ms of pre-motion frames folded into a move
 const SEG_MIN_MS = 260;                   // ignore twitches shorter than this
 const SEG_MAX = 4000;                     // ms cap on a single move
+// A segment only *starts* above SEG_START, so it always peaks at >= SEG_START.
+// Requiring a clearly higher peak before we accept the move rejects borderline
+// drift/jitter that grazes the start threshold and then fades. Tune on-device.
+const SEG_PEAK_MIN = 6.0;                 // peak activity a real move must reach
 const GESTURE_KEY = "oddball.gestures.v1";
 const GEST_PALETTE = ["#ff8fab", "#ffd166", "#8ec5ff", "#c792ea", "#7cffcb", "#ff9f6b", "#f871ff"];
 
@@ -289,15 +307,21 @@ function resample(frames, N) {
 }
 
 // Mean-center each dimension (so absolute orientation offset doesn't matter),
-// then divide every dimension by a single shared scale — the most active
-// dimension's spread. Per-dimension z-scoring is deliberately avoided: it blows
-// tiny sensor jitter on otherwise-still axes up to full scale and wrecks
-// matching. A shared scale keeps quiet axes quiet while giving amplitude
-// invariance. Operates on a copy so the caller's raw rows stay 0..1.
+// then divide every dimension by a single shared scale. Per-dimension z-scoring
+// is deliberately avoided: it blows tiny sensor jitter on otherwise-still axes
+// up to full scale and wrecks matching. A shared scale keeps quiet axes quiet
+// while giving amplitude invariance. Operates on a copy so the caller's raw
+// rows stay 0..1.
+//
+// The shared scale is the RMS of the per-axis spread (root of the mean
+// variance), NOT the single most-active axis. Using the max let one big-swinging
+// axis define the scale and shrink every other axis toward zero, so multi-axis
+// moves collapsed into look-alikes; the RMS lets all axes contribute, preserving
+// their relative shape.
 function normalizeShared(rows) {
   const D = GEST_DIMS.length, N = rows.length;
   const out = rows.map((r) => r.slice());
-  let maxVar = 0;
+  let sumVar = 0;
   for (let d = 0; d < D; d++) {
     let mean = 0;
     for (let i = 0; i < N; i++) mean += out[i][d];
@@ -305,9 +329,9 @@ function normalizeShared(rows) {
     let varr = 0;
     for (let i = 0; i < N; i++) { out[i][d] -= mean; varr += out[i][d] ** 2; }
     varr /= N;
-    if (varr > maxVar) maxVar = varr;
+    sumVar += varr;
   }
-  const inv = 1 / Math.max(Math.sqrt(maxVar), 0.02);
+  const inv = 1 / Math.max(Math.sqrt(sumVar / D), 0.02);
   for (let i = 0; i < N; i++) for (let d = 0; d < D; d++) out[i][d] *= inv;
   return out;
 }
@@ -860,12 +884,50 @@ const STORAGE_KEY = "oddball.patchbay.v1";
 let loading = true;        // suppress saves while restoring on startup
 let saveTimer = null;
 
+// ---- Schema migration ----------------------------------------------------
+// v2 corrected the ODD Ball CC mapping (see docs/MIDI.md): X/Y/Z orientation is
+// on CC3-5, not CC0-2 — so the modulation-source names were reassigned. Data
+// saved under the old scheme is remapped to whatever routed the SAME CC before,
+// so a restored patch keeps its exact physical behaviour. Each old name maps to
+// the new name for its CC; done atomically per-source so overlapping names
+// (tilt_x/y/z existed in both schemes) never double-migrate.
+const SCHEMA_VERSION = 2;
+const SOURCE_MIGRATION_V2 = {
+  tilt_x: "shake",     // was CC0
+  tilt_y: "twist",     // was CC1
+  tilt_z: "freefall",  // was CC2
+  cc3: "tilt_x",       // CC3 (X orientation)
+  cc4: "tilt_y",       // CC4 (Y orientation)
+  cc5: "tilt_z",       // CC5 (Z orientation)
+  cc6: "movement",     // CC6 (movement)
+};
+const migrateSource = (src) => SOURCE_MIGRATION_V2[src] || src;
+
+// Rewrite source names inside a { connections, seqCfg } bundle in place. Sources
+// that aren't CC params (roll_speed, tap, "g:<id>" gestures, …) pass through.
+function migrateBundleV2(bundle) {
+  if (!bundle || typeof bundle !== "object") return bundle;
+  if (bundle.connections && typeof bundle.connections === "object") {
+    for (const k in bundle.connections) {
+      const c = bundle.connections[k];
+      if (c && typeof c.source === "string") c.source = migrateSource(c.source);
+    }
+  }
+  if (bundle.seqCfg && typeof bundle.seqCfg === "object") {
+    const migrated = {};
+    for (const src in bundle.seqCfg) migrated[migrateSource(src)] = bundle.seqCfg[src];
+    bundle.seqCfg = migrated;
+  }
+  return bundle;
+}
+
 function serializeState() {
   const views = {};
   document.querySelectorAll(".side").forEach((s) => {
     views[s.dataset.view] = !s.classList.contains("side--hidden");
   });
   return {
+    schema: SCHEMA_VERSION,
     connections,
     seqCfg,
     sensitivity: +els.sens.value,
@@ -892,7 +954,10 @@ function saveStateSoon() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved && (saved.schema || 1) < SCHEMA_VERSION) migrateBundleV2(saved);
+    return saved;
   } catch (e) { return null; }
 }
 
@@ -959,6 +1024,16 @@ function loadProfiles() {
     const data = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
     profiles = Array.isArray(data) ? data.filter((p) => p && p.id) : [];
   } catch (e) { profiles = []; }
+  // Migrate pre-v2 profiles (old CC source names) and persist the upgrade once.
+  let changed = false;
+  for (const p of profiles) {
+    if ((p.schema || 1) < SCHEMA_VERSION) {
+      migrateBundleV2(p);
+      p.schema = SCHEMA_VERSION;
+      changed = true;
+    }
+  }
+  if (changed) writeProfiles();
 }
 
 function writeProfiles() {
@@ -974,6 +1049,7 @@ function saveCurrentProfile() {
     id: "p" + Date.now().toString(36),
     name,
     created: Date.now(),
+    schema: SCHEMA_VERSION,
     connections: serializeConnections(),
     seqCfg: JSON.parse(JSON.stringify(seqCfg)),
     gestures: serializeGestures(),

@@ -76,6 +76,11 @@ default synth voice:
   available as modulation sources in the patch bay.
 - **Roll detection** accumulates change across the orientation axes (CC3–5).
 
+Patch-bay layouts and saved profiles created before this remap are migrated
+automatically on load (schema v2): each old modulation source is repointed to
+whatever routed the same CC before, so restored patches keep their exact
+behaviour.
+
 ## Verifying the mapping
 
 The mapping is the one uncertain part, so confirm it against your ball:
