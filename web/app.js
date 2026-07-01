@@ -2,6 +2,9 @@
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = (n) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
+// The ball identifies the gesture by note number (see docs/MIDI.md).
+const NOTE_GESTURE = { 0: "Tap", 1: "Shake", 2: "Twist" };
+const NOTE_TAP = 0;
 const clamp1 = (v) => Math.max(0, Math.min(1, v));
 
 const els = {
@@ -2137,17 +2140,23 @@ function onMidiMessage(e) {
   msgCount++;
 
   if (type === 0x90 && d2 > 0) {            // note on
-    tapEnv = Math.max(tapEnv, d2 / 127);
+    const gesture = NOTE_GESTURE[d1];
+    // Shake (note 1) and Twist (note 2) already report through CC0/CC1, so
+    // only a Tap drives the tap envelope and the chimes — otherwise a vigorous
+    // shake double-triggers as both a shake and a fake tap. Unknown notes are
+    // treated as taps so a firmware with a remapped note table keeps working.
+    const isTap = gesture === undefined || d1 === NOTE_TAP;
+    if (isTap) tapEnv = Math.max(tapEnv, d2 / 127);
     els.lastNote.textContent = noteName(d1);
-    els.lastNoteSub.textContent = `note ${d1} · velocity ${d2}`;
+    els.lastNoteSub.textContent = `note ${d1} · velocity ${d2}${gesture ? ` · ${gesture.toLowerCase()}` : ""}`;
     els.orb.animate(
       [{ filter: "brightness(2.2)" }, { filter: "brightness(1)" }],
       { duration: 320, easing: "ease-out" }
     );
     spawnRipple(d2);
     // Pitch follows X orientation (CC3) so moving the ball plays different notes.
-    audio.hit(d2, (cc[3] ?? 64) / 127);
-    logEvent(`<b>NOTE</b> ${noteName(d1)} (${d1}) vel ${d2}`, "note");
+    if (isTap) audio.hit(d2, (cc[3] ?? 64) / 127);
+    logEvent(`<b>NOTE</b> ${noteName(d1)} (${d1}) vel ${d2}${gesture ? ` · ${gesture}` : ""}`, "note");
   } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {  // note off
     // (Quiet in the log to avoid clutter.)
   } else if (type === 0xb0) {               // control change
