@@ -275,7 +275,6 @@ let recordingGesture = null;       // { name, targetId, examples[] } while armed
 let seg = null;                    // { frames: [{t,feat}] } current motion segment
 let segLastActive = 0;
 let gestActivity = 0;              // smoothed Σ|Δfeat|/s
-let prevFeat = null;
 const histFrames = [];             // recent { t, feat } ring, for segment pre-roll
 const HIST_MS = 4000;
 
@@ -290,7 +289,6 @@ function updateGestureActivity(now, dt, feat) {
   // climbing instead of aliasing down once the ball outruns the frame rate.
   const speed = featAccum / dt;
   featAccum = 0;
-  prevFeat = feat;
   const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
   gestActivity += (speed - gestActivity) * a;
   histFrames.push({ t: now, feat });
@@ -1768,7 +1766,9 @@ async function previewInstrument(key, btn) {
   } else if (audio.ctx.state === "suspended") {
     await audio.ctx.resume();
     // Global sound is off: re-suspend after the demo finishes so we honor it.
-    if (!audio.enabled) setTimeout(() => { if (!audio.enabled) audio.ctx.suspend(); }, 1800);
+    // The demo swell is 1.3s but event voices ring on — lightning's rolling
+    // thunder tail lasts ~3.6s past its trigger — so leave room for the decay.
+    if (!audio.enabled) setTimeout(() => { if (!audio.enabled) audio.ctx.suspend(); }, 5000);
   }
   audio.preview(key);
   if (btn) {
@@ -2181,6 +2181,9 @@ function initViews() {
 
 function onMidiMessage(e) {
   const [status, d1, d2] = e.data;
+  // System-realtime housekeeping (clock, active sensing) isn't musical data;
+  // keep it out of the msg/s rate, the same way listen.py ignores it.
+  if (status >= 0xf8) return;
   const type = status & 0xf0;
   msgCount++;
 
