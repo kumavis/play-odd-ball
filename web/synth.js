@@ -450,54 +450,82 @@ class AudioEngine {
 
   _lightningStrike(dest, v) {
     const ctx = this.ctx, t = ctx.currentTime;
-    const level = 0.28 + v * 0.5;
+    const level = 0.4 + v * 0.7;
 
-    // 1) Bright crackle: a few rapid highpassed noise spikes (the flicker).
-    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2600;
+    // 1) Bright crackle: several rapid highpassed noise spikes (the flicker).
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2400;
     const crackGain = ctx.createGain(); crackGain.gain.value = 0;
-    const noise = ctx.createBufferSource(); noise.buffer = this._noiseBuffer(0.6);
+    const noise = ctx.createBufferSource(); noise.buffer = this._noiseBuffer(0.7);
     noise.connect(hp).connect(crackGain).connect(dest); noise.start(t);
     crackGain.gain.setValueAtTime(0, t);
-    const flickers = 2 + Math.floor(Math.random() * 3);
+    const flickers = 3 + Math.floor(Math.random() * 4);
     let ct = t;
     for (let i = 0; i < flickers; i++) {
-      const st = t + i * (0.02 + Math.random() * 0.05);
-      const amp = level * (1 - i * 0.18);
+      const st = t + i * (0.015 + Math.random() * 0.045);
+      const amp = level * 1.15 * (1 - i * 0.13);
       crackGain.gain.setValueAtTime(0.0001, st);
-      crackGain.gain.linearRampToValueAtTime(amp, st + 0.002);
-      crackGain.gain.exponentialRampToValueAtTime(0.0001, st + 0.05 + Math.random() * 0.06);
+      crackGain.gain.linearRampToValueAtTime(amp, st + 0.0015);
+      crackGain.gain.exponentialRampToValueAtTime(0.0001, st + 0.04 + Math.random() * 0.06);
       ct = st + 0.12;
     }
     noise.stop(ct + 0.3);
 
-    // 2) Electric snap: a distorted saw sweeping sharply downward.
+    // 2) Electric snap: a hard-distorted saw sweeping sharply downward.
     const o = ctx.createOscillator(); o.type = "sawtooth";
-    o.frequency.setValueAtTime(3000 + Math.random() * 2200, t);
-    o.frequency.exponentialRampToValueAtTime(180, t + 0.26);
-    const shaper = ctx.createWaveShaper(); shaper.curve = this._shaper(10);
+    o.frequency.setValueAtTime(3400 + Math.random() * 2600, t);
+    o.frequency.exponentialRampToValueAtTime(140, t + 0.28);
+    const shaper = ctx.createWaveShaper(); shaper.curve = this._shaper(22);
     const og = ctx.createGain(); og.gain.value = 0;
     o.connect(shaper).connect(og).connect(dest);
     og.gain.setValueAtTime(0.0001, t);
-    og.gain.linearRampToValueAtTime(level * 0.4, t + 0.004);
-    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-    o.start(t); o.stop(t + 0.32);
+    og.gain.linearRampToValueAtTime(level * 0.6, t + 0.003);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.34);
+    o.start(t); o.stop(t + 0.36);
 
-    // 3) Rolling thunder tail: lowpassed noise sweeping down, with a second swell.
-    const rt = t + 0.05 + Math.random() * 0.15;
-    const rumble = ctx.createBufferSource(); rumble.buffer = this._noiseBuffer(2.2);
+    // 3) THUNDER BOOM: a deep sub-bass impact that arrives just after the flash.
+    const bt = t + 0.06 + Math.random() * 0.12;
+    const sub = ctx.createOscillator(); sub.type = "sine";
+    sub.frequency.setValueAtTime(72, bt);
+    sub.frequency.exponentialRampToValueAtTime(28, bt + 0.9);
+    const subG = ctx.createGain(); subG.gain.value = 0;
+    sub.connect(subG).connect(dest);
+    subG.gain.setValueAtTime(0.0001, bt);
+    subG.gain.linearRampToValueAtTime(level * 1.1, bt + 0.02);
+    subG.gain.exponentialRampToValueAtTime(0.0001, bt + 1.1);
+    sub.start(bt); sub.stop(bt + 1.2);
+
+    // Boom body: distorted low noise burst for the concussive "crack" of the boom.
+    const boom = ctx.createBufferSource(); boom.buffer = this._noiseBuffer(1.2);
+    const blp = ctx.createBiquadFilter(); blp.type = "lowpass"; blp.Q.value = 2.5;
+    blp.frequency.setValueAtTime(900, bt);
+    blp.frequency.exponentialRampToValueAtTime(90, bt + 0.7);
+    const bsh = ctx.createWaveShaper(); bsh.curve = this._shaper(6);
+    const boomG = ctx.createGain(); boomG.gain.value = 0;
+    boom.connect(blp).connect(bsh).connect(boomG).connect(dest);
+    boomG.gain.setValueAtTime(0.0001, bt);
+    boomG.gain.linearRampToValueAtTime(level * 0.85, bt + 0.03);
+    boomG.gain.exponentialRampToValueAtTime(0.0001, bt + 1.0);
+    boom.start(bt); boom.stop(bt + 1.2);
+
+    // 4) Rolling thunder tail: lowpassed noise sweeping down, with a second swell.
+    const rt = bt + 0.35 + Math.random() * 0.25;
+    const rumble = ctx.createBufferSource(); rumble.buffer = this._noiseBuffer(2.8);
     const rlp = ctx.createBiquadFilter(); rlp.type = "lowpass"; rlp.Q.value = 1.2;
-    rlp.frequency.setValueAtTime(420, rt);
-    rlp.frequency.exponentialRampToValueAtTime(70, rt + 1.8);
+    rlp.frequency.setValueAtTime(380, rt);
+    rlp.frequency.exponentialRampToValueAtTime(55, rt + 2.2);
     const rg = ctx.createGain(); rg.gain.value = 0;
     rumble.connect(rlp).connect(rg).connect(dest);
     rg.gain.setValueAtTime(0, rt);
-    rg.gain.linearRampToValueAtTime(level * 0.5, rt + 0.06);
-    rg.gain.exponentialRampToValueAtTime(level * 0.2, rt + 0.6);
-    rg.gain.linearRampToValueAtTime(level * 0.34, rt + 0.95);
-    rg.gain.exponentialRampToValueAtTime(0.0001, rt + 1.9);
-    rumble.start(rt); rumble.stop(rt + 2.1);
+    rg.gain.linearRampToValueAtTime(level * 0.6, rt + 0.08);
+    rg.gain.exponentialRampToValueAtTime(level * 0.25, rt + 0.7);
+    rg.gain.linearRampToValueAtTime(level * 0.42, rt + 1.1);
+    rg.gain.exponentialRampToValueAtTime(0.0001, rt + 2.3);
+    rumble.start(rt); rumble.stop(rt + 2.5);
 
-    setTimeout(() => { crackGain.disconnect(); og.disconnect(); rg.disconnect(); }, 2700);
+    setTimeout(() => {
+      crackGain.disconnect(); og.disconnect(); subG.disconnect();
+      boomG.disconnect(); rg.disconnect();
+    }, 3600);
   }
 
   // ---- Rainfall (gentle) ------------------------------------------------
