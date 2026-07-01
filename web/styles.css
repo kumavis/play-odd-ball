@@ -201,24 +201,67 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .hist-dock-head {
   display: flex; align-items: center; gap: 12px; width: 100%;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-  padding: 8px 12px; cursor: pointer; color: var(--text); text-align: left;
+  padding: 6px 10px; color: var(--text); text-align: left;
 }
-.hist-dock-head:hover { background: #232743; }
+.hist-dock-toggle {
+  display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  background: none; border: none; color: var(--text); cursor: pointer; padding: 2px 4px;
+}
+.hist-dock-toggle:hover .hist-dock-title { color: var(--text); }
 .hist-dock-caret { color: var(--muted); transition: transform 0.15s ease; font-size: 11px; }
 .hist-dock:not(.hist-dock--collapsed) .hist-dock-caret { transform: rotate(90deg); }
 .hist-dock-title {
   font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
   white-space: nowrap;
 }
-.hist-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); overflow: hidden; }
+.hist-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); overflow: hidden; flex: 1 1 auto; }
 .hist-legend .item { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
 .hist-legend .sw { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.hist-actions { display: flex; gap: 8px; flex: 0 0 auto; margin-left: auto; }
+.rec-btn {
+  font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.rec-btn:hover { background: #232743; color: var(--text); }
+.rec-btn.is-recording {
+  background: #3a1220; color: #ff5d73; border-color: #ff5d73;
+  box-shadow: 0 0 14px rgba(255,93,115,0.45);
+  animation: recpulse 1s ease-in-out infinite;
+}
+.rec-btn.is-arming {
+  background: #14203a; color: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(0,229,255,0.4);
+  animation: recpulse 1s ease-in-out infinite;
+}
+@keyframes recpulse { 0%,100% { opacity: 1; } 50% { opacity: 0.55; } }
 .hist-canvas {
   width: 100%; height: 150px; display: block; margin-top: 8px;
   background: #0c0e1a; border: 1px solid var(--line); border-radius: 12px;
 }
 .hist-dock--collapsed .hist-canvas { display: none; }
 .hist-dock--collapsed .hist-legend { display: none; }
+
+/* ---- Recorded gestures list ---- */
+.gesture-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.gesture-list:empty { display: none; }
+.gesture {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.gesture.is-hit { border-color: var(--accent); box-shadow: 0 0 16px rgba(0,229,255,0.6); }
+.g-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.g-name { font-size: 13px; font-weight: 600; color: var(--text); flex: 0 0 auto; min-width: 90px; }
+.g-dist { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; width: 66px; }
+.g-sens-label { font-size: 11px; color: var(--muted); margin-left: auto; }
+.g-sens { width: 130px; accent-color: var(--accent); }
+.g-del {
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 6px; width: 24px; height: 24px; cursor: pointer; flex: 0 0 auto;
+}
+.g-del:hover { color: var(--warn); border-color: var(--warn); }
 
 /* ---- Drawer: secondary views overlay on the right ---- */
 .drawer {

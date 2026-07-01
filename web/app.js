@@ -29,6 +29,9 @@ const els = {
   histToggle: document.getElementById("histToggle"),
   histCanvas: document.getElementById("histCanvas"),
   histLegend: document.getElementById("histLegend"),
+  recSession: document.getElementById("recSession"),
+  recMove: document.getElementById("recMove"),
+  gestureList: document.getElementById("gestureList"),
   drawer: document.getElementById("drawer"),
   viewToggles: document.getElementById("viewToggles"),
   connEditor: document.getElementById("connEditor"),
@@ -90,6 +93,287 @@ const PARAMS = {
   cc6:        { label: "CC6", color: "hsl(290 75% 62%)", get: () => (cc[6] ?? 0) / 127 },
 };
 const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
+
+// ---- Gesture recognition + session recording ----------------------------
+// A "move" is a short burst of motion (bracketed by stillness). We watch the
+// live motion energy, cut out each burst as a segment, resample it to a fixed
+// length and z-normalize it so speed/scale don't matter, then compare against
+// saved templates with Dynamic Time Warping. A close enough match fires a
+// decaying envelope that shows up as its own trigger source in the patch bay.
+const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // orientation + spin CCs
+const GEST_N = 32;                        // template length after resampling
+const SEG_START = 0.22;                   // motion energy that begins a segment
+const SEG_END = 0.10;                     // energy under which motion is "done"
+const SEG_HOLD = 220;                     // ms of stillness that ends a segment
+const SEG_MIN = 8;                        // ignore blips shorter than this
+const SEG_MAX = 2600;                     // ms cap on a single move
+const GESTURE_KEY = "oddball.gestures.v1";
+const GEST_PALETTE = ["#ff8fab", "#ffd166", "#8ec5ff", "#c792ea", "#7cffcb", "#ff9f6b", "#f871ff"];
+
+let gestures = [];                 // [{ id, name, color, threshold, template }]
+const gestureEnv = {};             // id -> 0..1 decaying trigger envelope
+const gestureCool = {};            // id -> last-fire timestamp (debounce)
+let recordingGesture = null;       // { name } while armed to capture a template
+let seg = null;                    // { frames, startT } current motion segment
+let segLastActive = 0;
+
+const featureVec = () => GEST_DIMS.map((c) => (cc[c] ?? 0) / 127);
+
+// Resample a variable-length list of frames to N points, mean-center each
+// dimension (so absolute orientation offset doesn't matter), then divide every
+// dimension by a single shared scale — the most active dimension's spread. Per-
+// dimension z-scoring is deliberately avoided: it blows tiny sensor jitter on
+// otherwise-still axes up to full scale and wrecks matching. A shared scale
+// keeps quiet axes quiet while still giving overall amplitude invariance.
+function resampleNorm(frames, N) {
+  const D = GEST_DIMS.length;
+  const out = [];
+  for (let i = 0; i < N; i++) {
+    const pos = (i / (N - 1)) * (frames.length - 1);
+    const lo = Math.floor(pos), hi = Math.min(frames.length - 1, lo + 1);
+    const f = pos - lo;
+    const row = new Array(D);
+    for (let d = 0; d < D; d++) row[d] = frames[lo][d] * (1 - f) + frames[hi][d] * f;
+    out.push(row);
+  }
+  let maxVar = 0;
+  for (let d = 0; d < D; d++) {
+    let mean = 0;
+    for (let i = 0; i < N; i++) mean += out[i][d];
+    mean /= N;
+    let varr = 0;
+    for (let i = 0; i < N; i++) { out[i][d] -= mean; varr += out[i][d] ** 2; }
+    varr /= N;
+    if (varr > maxVar) maxVar = varr;
+  }
+  const inv = 1 / Math.max(Math.sqrt(maxVar), 0.02);
+  for (let i = 0; i < N; i++) for (let d = 0; d < D; d++) out[i][d] *= inv;
+  return out;
+}
+
+// DTW distance between two equal-length z-normalized sequences. Local cost is
+// Euclidean distance scaled by sqrt(D); result is averaged over the path length
+// so the returned number is an average per-step distance (dimension-agnostic).
+function dtwDist(a, b) {
+  const n = a.length, m = b.length, D = GEST_DIMS.length, invD = 1 / Math.sqrt(D);
+  const INF = Infinity;
+  let prev = new Array(m + 1).fill(INF);
+  let cur = new Array(m + 1).fill(INF);
+  prev[0] = 0;
+  for (let i = 1; i <= n; i++) {
+    cur[0] = INF;
+    for (let j = 1; j <= m; j++) {
+      let s = 0;
+      for (let d = 0; d < D; d++) { const diff = a[i - 1][d] - b[j - 1][d]; s += diff * diff; }
+      const cost = Math.sqrt(s) * invD;
+      cur[j] = cost + Math.min(prev[j], cur[j - 1], prev[j - 1]);
+    }
+    [prev, cur] = [cur, prev];
+  }
+  return prev[m] / n;
+}
+
+// Feed each animation frame's motion energy in; when a move completes it is
+// either saved as a template (if we're arming a recording) or matched.
+function handleSegment(act, now) {
+  const feat = featureVec();
+  if (!seg) {
+    if ((recordingGesture || gestures.length) && act > SEG_START) {
+      seg = { frames: [feat], startT: now };
+      segLastActive = now;
+    }
+    return;
+  }
+  seg.frames.push(feat);
+  if (act > SEG_END) segLastActive = now;
+  if (now - segLastActive > SEG_HOLD || now - seg.startT > SEG_MAX) {
+    const frames = seg.frames;
+    seg = null;
+    if (frames.length >= SEG_MIN) processSegment(frames);
+  }
+}
+
+function processSegment(frames) {
+  const norm = resampleNorm(frames, GEST_N);
+  if (recordingGesture) {
+    saveGesture(recordingGesture.name, norm);
+    recordingGesture = null;
+    updateRecMoveBtn();
+  } else {
+    recognize(norm);
+  }
+}
+
+function recognize(norm) {
+  let best = null;
+  for (const g of gestures) {
+    const d = dtwDist(norm, g.template);
+    g._dist = d;
+    if (!best || d < best.d) best = { g, d };
+  }
+  if (best && best.d <= best.g.threshold) fireGesture(best.g, best.d);
+  renderGestures();
+}
+
+function fireGesture(g, d) {
+  const now = performance.now();
+  if (now - (gestureCool[g.id] || 0) < 500) return;
+  gestureCool[g.id] = now;
+  gestureEnv[g.id] = 1;
+  logEvent(`<b>GESTURE</b> ${g.name} matched · d=${d.toFixed(2)}`, "note");
+  const row = els.gestureList.querySelector(`.gesture[data-id="${g.id}"]`);
+  if (row) { row.classList.add("is-hit"); setTimeout(() => row.classList.remove("is-hit"), 450); }
+}
+
+// ---- Gesture storage + patch-bay integration ----------------------------
+// The default match threshold (avg per-step DTW distance). Lower = stricter.
+const GEST_THRESH_MIN = 0.15, GEST_THRESH_MAX = 1.1, GEST_THRESH_DEFAULT = 0.55;
+const sensToThresh = (s) => GEST_THRESH_MIN + (s / 100) * (GEST_THRESH_MAX - GEST_THRESH_MIN);
+const threshToSens = (t) => Math.round(((t - GEST_THRESH_MIN) / (GEST_THRESH_MAX - GEST_THRESH_MIN)) * 100);
+
+function registerGestureParam(g) {
+  PARAMS["g:" + g.id] = {
+    label: "✋ " + g.name,
+    color: g.color,
+    gesture: true,
+    get: () => gestureEnv[g.id] || 0,
+  };
+}
+
+function unregisterGestureParam(id) {
+  const key = "g:" + id;
+  delete PARAMS[key];
+  delete sparkBuf[key];
+  delete gestureEnv[id];
+  // Drop any connections that were driven by this gesture.
+  for (const instKey in connections) {
+    if (connections[instKey] && connections[instKey].source === key) disconnect(instKey);
+  }
+}
+
+function saveGesture(name, template) {
+  const g = {
+    id: "g" + Date.now().toString(36),
+    name: name || `Move ${gestures.length + 1}`,
+    color: GEST_PALETTE[gestures.length % GEST_PALETTE.length],
+    threshold: GEST_THRESH_DEFAULT,
+    template,
+  };
+  gestures.push(g);
+  registerGestureParam(g);
+  persistGestures();
+  rebuildGraph();
+  renderGestures();
+  logEvent(`<b>GESTURE</b> saved “${g.name}” — wire it up in the patch bay`, "note");
+}
+
+function deleteGesture(id) {
+  unregisterGestureParam(id);
+  gestures = gestures.filter((g) => g.id !== id);
+  persistGestures();
+  rebuildGraph();
+  renderGestures();
+}
+
+function persistGestures() {
+  try {
+    const data = gestures.map((g) => ({
+      id: g.id, name: g.name, color: g.color, threshold: g.threshold, template: g.template,
+    }));
+    localStorage.setItem(GESTURE_KEY, JSON.stringify(data));
+  } catch (e) { /* storage unavailable — ignore */ }
+}
+
+function loadGestures() {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(GESTURE_KEY) || "null"); } catch (e) { data = null; }
+  if (!Array.isArray(data)) return;
+  gestures = data.filter((g) => g && Array.isArray(g.template) && g.template.length === GEST_N)
+    .map((g) => ({
+      id: g.id, name: g.name || "Move",
+      color: g.color || GEST_PALETTE[0],
+      threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
+      template: g.template,
+    }));
+  for (const g of gestures) registerGestureParam(g);
+}
+
+// ---- Gesture + session recording UI -------------------------------------
+function updateRecMoveBtn() {
+  const arming = !!recordingGesture;
+  els.recMove.classList.toggle("is-arming", arming);
+  els.recMove.textContent = arming ? "✋ Do the move…" : "✋ Record move";
+}
+
+function toggleRecordMove() {
+  if (recordingGesture) { recordingGesture = null; updateRecMoveBtn(); return; }
+  const name = (window.prompt("Name this move:", `Move ${gestures.length + 1}`) || "").trim();
+  if (name === null) return;
+  recordingGesture = { name: name || `Move ${gestures.length + 1}` };
+  seg = null; // start fresh; the next burst of motion becomes the template
+  updateRecMoveBtn();
+}
+
+function renderGestures() {
+  els.gestureList.innerHTML = gestures.map((g) => {
+    const dist = typeof g._dist === "number" ? g._dist.toFixed(2) : "—";
+    return `<div class="gesture" data-id="${g.id}">
+      <span class="g-dot" style="background:${g.color}"></span>
+      <span class="g-name">${g.name}</span>
+      <span class="g-dist">d ${dist}</span>
+      <span class="g-sens-label">sensitivity</span>
+      <input class="g-sens" type="range" min="0" max="100" value="${threshToSens(g.threshold)}" data-id="${g.id}" />
+      <button class="g-del" data-id="${g.id}" title="Delete move">×</button>
+    </div>`;
+  }).join("");
+}
+
+// ---- Session recording: capture the input stream, then download it -------
+let sessionRec = null;         // { start, last, samples: [] }
+const SESSION_SAMPLE_MS = 50;  // ~20 Hz is plenty for later analysis
+
+function toggleSessionRec() {
+  if (sessionRec) { stopSessionRec(); return; }
+  sessionRec = { start: performance.now(), last: 0, samples: [] };
+  els.recSession.classList.add("is-recording");
+  els.recSession.textContent = "⏹ Stop · 0.0s";
+  logEvent("<b>REC</b> session recording started", "note");
+}
+
+function sampleSession(now) {
+  if (!sessionRec) return;
+  const t = now - sessionRec.start;
+  if (t - sessionRec.last < SESSION_SAMPLE_MS) return;
+  sessionRec.last = t;
+  const values = {};
+  for (const key in PARAMS) values[key] = +paramValue(key).toFixed(4);
+  sessionRec.samples.push({ t: Math.round(t), values });
+  els.recSession.textContent = `⏹ Stop · ${(t / 1000).toFixed(1)}s`;
+}
+
+function stopSessionRec() {
+  const rec = sessionRec;
+  sessionRec = null;
+  els.recSession.classList.remove("is-recording");
+  els.recSession.textContent = "⏺ Record";
+  if (!rec || !rec.samples.length) return;
+  const payload = {
+    recorded: new Date().toISOString(),
+    durationMs: Math.round(performance.now() - rec.start),
+    params: Object.keys(PARAMS).map((k) => ({ key: k, label: PARAMS[k].label })),
+    samples: rec.samples,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `oddball-session-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  logEvent(`<b>REC</b> session saved · ${rec.samples.length} samples`, "note");
+}
 
 // ---- Connections --------------------------------------------------------
 // Each instrument input takes one parameter (or none). A connection carries a
@@ -248,11 +532,15 @@ function drawSparks() {
 // ---- Bottom histogram: all patch inputs on one time-series --------------
 let histCtx = null;
 
-function setupHistory() {
-  histCtx = els.histCanvas.getContext("2d");
+function buildHistLegend() {
   els.histLegend.innerHTML = Object.keys(PARAMS).map((k) =>
     `<span class="item"><span class="sw" style="background:${PARAMS[k].color}"></span>${PARAMS[k].label}</span>`
   ).join("");
+}
+
+function setupHistory() {
+  histCtx = els.histCanvas.getContext("2d");
+  buildHistLegend();
 }
 
 function histOpen() {
@@ -314,6 +602,14 @@ function buildGraph() {
   const svg = document.getElementById("graphSvg");
   const srcKeys = Object.keys(PARAMS);
 
+  // Clear any previous nodes/cables so this can rebuild when gestures change.
+  el.querySelectorAll(".gnode").forEach((n) => n.remove());
+  svg.innerHTML = "";
+  graph.srcPorts = {}; graph.srcNodes = {}; graph.srcVals = {};
+  graph.sparkCanvas = {}; graph.sparkCtx = {};
+  graph.instPorts = {}; graph.instNodes = {};
+  graph.cables = {};
+
   const makeNode = (cls, inner, portCls) => {
     const node = document.createElement("div");
     node.className = `gnode ${cls}`;
@@ -356,6 +652,14 @@ function buildGraph() {
   });
 
   layoutGraph();
+  refreshConnectionStyles();
+}
+
+// One-time graph event wiring (kept out of buildGraph so rebuilding the nodes
+// for gesture sources doesn't stack duplicate listeners).
+function wireGraphEvents() {
+  const el = els.graph;
+  const svg = document.getElementById("graphSvg");
   window.addEventListener("resize", layoutGraph);
   el.addEventListener("pointerdown", onGraphPointerDown);
   svg.addEventListener("pointerdown", onGraphPointerDown); // clicks on cables
@@ -366,7 +670,14 @@ function buildGraph() {
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && (graph.link || graph.mode)) clearLink();
   });
-  refreshConnectionStyles();
+}
+
+// Rebuild source/instrument nodes after gestures are added or removed, keeping
+// existing connections and the histogram legend in sync.
+function rebuildGraph() {
+  clearLink();
+  buildGraph();
+  buildHistLegend();
 }
 
 function layoutGraph() {
@@ -889,10 +1200,16 @@ function refreshPorts() {
 }
 
 async function init() {
+  // Gestures must load before the patch config so connections that reference a
+  // gesture source ("g:<id>") validate against a PARAMS entry that exists.
+  loadGestures();
+
   const saved = loadState();
   applySavedState(saved);
 
   buildGraph();
+  wireGraphEvents();
+  renderGestures();
   audio.chimesOn = !!connections.chimes;
   initViews();
   if (saved && saved.views) {
@@ -905,6 +1222,19 @@ async function init() {
 
   els.soundToggle.addEventListener("click", toggleSound);
   els.randomPatch.addEventListener("click", randomizePatch);
+  els.recSession.addEventListener("click", toggleSessionRec);
+  els.recMove.addEventListener("click", toggleRecordMove);
+  // Gesture list: sensitivity sliders + delete buttons (event delegation).
+  els.gestureList.addEventListener("input", (e) => {
+    const sl = e.target.closest(".g-sens");
+    if (!sl) return;
+    const g = gestures.find((x) => x.id === sl.dataset.id);
+    if (g) { g.threshold = sensToThresh(+sl.value); persistGestures(); }
+  });
+  els.gestureList.addEventListener("click", (e) => {
+    const del = e.target.closest(".g-del");
+    if (del) deleteGesture(del.dataset.id);
+  });
   els.sens.addEventListener("input", (e) => { applySensitivity(+e.target.value); saveStateSoon(); });
   applySensitivity(+els.sens.value);
 
@@ -973,11 +1303,17 @@ async function init() {
     rollSpeed = rollRaw <= ROLL_GATE ? 0 : (rollRaw - ROLL_GATE) / (1 - ROLL_GATE);
     tapEnv *= 0.88; // decay the tap envelope each frame
 
+    // Gesture triggers: decay their envelopes, then feed this frame's motion
+    // energy to the segmenter (which fires a match or captures a template).
+    for (const id in gestureEnv) gestureEnv[id] *= 0.85;
+    handleSegment(Math.max(lastMotion, rollRaw), now);
+
     updateInstruments();
     renderRoll();
     sampleSparks();
     drawSparks();
     drawHistory();
+    sampleSession(now);
 
     if (now - lastRate >= 1000) {
       const rate = Math.round((msgCount - lastCount) * 1000 / (now - lastRate));

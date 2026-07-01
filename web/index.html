@@ -37,12 +37,19 @@
       </div>
 
       <div id="histDock" class="hist-dock hist-dock--collapsed">
-        <button id="histToggle" class="hist-dock-head" title="Toggle input history">
-          <span class="hist-dock-caret">▸</span>
-          <span class="hist-dock-title">Input history</span>
+        <div class="hist-dock-head">
+          <button id="histToggle" class="hist-dock-toggle" title="Toggle input history">
+            <span class="hist-dock-caret">▸</span>
+            <span class="hist-dock-title">Input history</span>
+          </button>
           <span id="histLegend" class="hist-legend"></span>
-        </button>
+          <div class="hist-actions">
+            <button id="recSession" class="rec-btn" title="Record this session's data and download it">⏺ Record</button>
+            <button id="recMove" class="rec-btn" title="Record a move, then wire it as a trigger in the patch bay">✋ Record move</button>
+          </div>
+        </div>
         <canvas id="histCanvas" class="hist-canvas"></canvas>
+        <div id="gestureList" class="gesture-list"></div>
       </div>
     </section>
 
