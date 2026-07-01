@@ -240,6 +240,45 @@ function makeTemplate(raw, crop) {
   return resampleNorm(a.length >= 2 ? a : raw, GEST_N);
 }
 
+// Build SEVERAL DTW templates for one move by cropping the capture a few
+// different ways around the primary crop: as-cropped, looser (more silence
+// on both ends), tighter (core only), and shifted to keep more head or tail.
+// Recognition then takes the best (minimum) distance across all of them, so a
+// performance with slightly more/less lead-in or follow-through than the
+// original still registers as the same move. Derived from `raw`, so nothing
+// extra is stored — they're rebuilt on load and whenever the crop is edited.
+function makeTemplates(raw, crop) {
+  const n = raw.length;
+  const span = Math.max(2, crop.end - crop.start);
+  const p = (f) => Math.round(span * f);
+  const windows = [
+    [crop.start, crop.end],                        // as cropped
+    [crop.start - p(0.22), crop.end + p(0.22)],    // looser (keep more silence)
+    [crop.start + p(0.15), crop.end - p(0.15)],    // tighter (core only)
+    [crop.start, crop.end + p(0.35)],              // keep more follow-through
+    [crop.start - p(0.35), crop.end],              // keep more wind-up
+  ];
+  const out = [];
+  const seen = new Set();
+  for (let [s, e] of windows) {
+    s = Math.max(0, Math.min(n - 3, s));
+    e = Math.max(s + 2, Math.min(n - 1, e));
+    const key = s + "-" + e;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(resampleNorm(raw.slice(s, e + 1), GEST_N));
+  }
+  return out;
+}
+
+// Best (minimum) DTW distance of a candidate against all of a move's templates.
+function gestureDist(norm, g) {
+  const ts = (g.templates && g.templates.length) ? g.templates : (g.template ? [g.template] : []);
+  let best = Infinity;
+  for (const t of ts) { const d = dtwDist(norm, t); if (d < best) best = d; }
+  return best;
+}
+
 // Find the active span of a raw capture using a scale-free activity measure
 // (per-step change smoothed, thresholded relative to its own peak) so "cut
 // silence" works regardless of how hard the move was.
@@ -327,7 +366,7 @@ function processSegment(frames) {
 function recognize(norm) {
   let best = null;
   for (const g of gestures) {
-    const d = dtwDist(norm, g.template);
+    const d = gestureDist(norm, g);
     g._dist = d;
     if (!best || d < best.d) best = { g, d };
   }
@@ -385,7 +424,7 @@ function unregisterGestureParam(id) {
 
 function saveGesture(name, rawFrames) {
   const raw = resample(rawFrames, RAW_N);
-  const crop = { start: 0, end: RAW_N - 1 };
+  const crop = autoTrim(raw);   // cut the silent lead-in / tail-out on record
   const g = {
     id: "g" + Date.now().toString(36),
     name: name || `Move ${gestures.length + 1}`,
@@ -395,6 +434,7 @@ function saveGesture(name, rawFrames) {
     raw,
     crop,
     template: makeTemplate(raw, crop),
+    templates: makeTemplates(raw, crop),
   };
   gestures.push(g);
   registerGestureParam(g);
@@ -444,6 +484,7 @@ function gestureFromData(g) {
     cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
     raw, crop,
     template: makeTemplate(raw, crop),
+    templates: makeTemplates(raw, crop),
   };
 }
 
@@ -565,6 +606,7 @@ function recomputeEditingTemplate() {
   const g = editingGesture;
   if (!g) return;
   g.template = makeTemplate(g.raw, g.crop);
+  g.templates = makeTemplates(g.raw, g.crop);
   updateEditorSettingLabels();
   persistGesturesSoon();
 }
