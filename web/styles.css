@@ -81,6 +81,16 @@ body { display: flex; flex-direction: column; height: 100vh; }
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
+.tool-btn {
+  font-size: 13px; font-weight: 600;
+  padding: 8px 14px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.08s ease;
+}
+.tool-btn:hover { background: #232743; box-shadow: 0 0 14px rgba(108,92,231,0.35); }
+.tool-btn:active { transform: scale(0.96); }
+
 .sound-btn--off { background: var(--panel-2); color: var(--muted); }
 .sound-btn--on {
   background: linear-gradient(90deg, var(--accent), var(--accent-2));

@@ -17,6 +17,7 @@ const els = {
   lastNoteSub: document.getElementById("lastNoteSub"),
   hint: document.getElementById("hint"),
   soundToggle: document.getElementById("soundToggle"),
+  randomPatch: document.getElementById("randomPatch"),
   rollFill: document.getElementById("rollFill"),
   rollVal: document.getElementById("rollVal"),
   gateMark: document.getElementById("gateMark"),
@@ -39,7 +40,7 @@ const els = {
 };
 
 let midi = null;
-let currentInput = null;
+let activeInputs = [];   // every MIDIInput currently feeding the app
 let msgCount = 0;
 
 const audio = new AudioEngine();
@@ -370,6 +371,30 @@ function refreshConnectionStyles() {
     graph.instPorts[inst.key].classList.toggle("is-connected", on);
     graph.instNodes[inst.key].classList.toggle("is-off", !on);
   }
+}
+
+// Build a fresh random patch: pick a handful of instruments and wire each to a
+// random parameter with a random response curve. Kept to a few voices so the
+// result is playable rather than a wall of sound.
+function randomizePatch() {
+  for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  const paramKeys = Object.keys(PARAMS);
+  const insts = INSTRUMENTS.slice();
+  for (let i = insts.length - 1; i > 0; i--) {           // Fisher–Yates shuffle
+    const j = Math.floor(Math.random() * (i + 1));
+    [insts[i], insts[j]] = [insts[j], insts[i]];
+  }
+  const n = 3 + Math.floor(Math.random() * 5);           // 3..7 instruments
+  for (let i = 0; i < n && i < insts.length; i++) {
+    const src = paramKeys[Math.floor(Math.random() * paramKeys.length)];
+    connect(src, insts[i].key);
+    const c = connections[insts[i].key];
+    c.atten = +(0.5 + Math.random() * 0.5).toFixed(2);
+    c.thresh = +(Math.random() * 0.35).toFixed(2);
+  }
+  closeEditor();
+  refreshConnectionStyles();
+  saveStateSoon();
 }
 
 // Connecting works two ways, no long drag required:
@@ -729,14 +754,28 @@ function onMidiMessage(e) {
   }
 }
 
-function selectInput(id) {
-  if (currentInput) currentInput.onmidimessage = null;
-  currentInput = midi.inputs.get(id);
-  if (!currentInput) { setStatus(false, "disconnected"); return; }
-  currentInput.onmidimessage = onMidiMessage;
-  setStatus(true, `connected`);
+const isOdd = (input) => /odd/i.test(input.name);
+
+// Bind onmidimessage to a list of inputs (and detach from all others) so any
+// number of controllers can drive the app at once.
+function bindInputs(inputs) {
+  for (const inp of midi.inputs.values()) inp.onmidimessage = null;
+  activeInputs = inputs;
+  for (const inp of inputs) inp.onmidimessage = onMidiMessage;
+  if (inputs.length === 0) { setStatus(false, "disconnected"); return; }
+  setStatus(true, inputs.length > 1 ? `connected · ${inputs.length}` : "connected");
   els.hint.classList.add("hide");
-  logEvent(`listening on <b>${currentInput.name}</b>`);
+  logEvent(`listening on <b>${inputs.map((i) => i.name).join(", ")}</b>`);
+}
+
+// Resolve a dropdown value ("all-odd" / "all" / a specific port id) to inputs.
+function applySelection(value) {
+  const inputs = [...midi.inputs.values()];
+  let chosen;
+  if (value === "all-odd") chosen = inputs.filter(isOdd);
+  else if (value === "all") chosen = inputs;
+  else { const one = midi.inputs.get(value); chosen = one ? [one] : []; }
+  bindInputs(chosen);
 }
 
 function refreshPorts() {
@@ -749,19 +788,26 @@ function refreshPorts() {
     opt.value = "";
     els.portSelect.appendChild(opt);
     setStatus(false, "no devices");
+    activeInputs = [];
     return;
   }
-  for (const input of inputs) {
-    const opt = document.createElement("option");
-    opt.value = input.id;
-    opt.textContent = input.name;
-    els.portSelect.appendChild(opt);
-  }
-  // Prefer the ODD Ball, otherwise keep prior selection or first port.
-  const odd = inputs.find((i) => /odd/i.test(i.name));
-  const target = odd?.id || (inputs.some((i) => i.id === prev) ? prev : inputs[0].id);
+  const oddInputs = inputs.filter(isOdd);
+  const addOpt = (val, label) => {
+    const o = document.createElement("option");
+    o.value = val; o.textContent = label;
+    els.portSelect.appendChild(o);
+  };
+  // Grouped choices: all ODD Balls together, all inputs, then each port.
+  if (oddInputs.length) addOpt("all-odd", oddInputs.length > 1 ? `All ODD Balls (${oddInputs.length})` : "ODD Ball");
+  if (inputs.length > 1) addOpt("all", `All inputs (${inputs.length})`);
+  for (const input of inputs) addOpt(input.id, input.name);
+
+  // Keep the prior choice if still valid, else default to all ODD Balls.
+  const values = [...els.portSelect.options].map((o) => o.value);
+  const target = (prev && values.includes(prev)) ? prev
+    : (oddInputs.length ? "all-odd" : inputs[0].id);
   els.portSelect.value = target;
-  selectInput(target);
+  applySelection(target);
 }
 
 async function init() {
@@ -776,6 +822,7 @@ async function init() {
   }
 
   els.soundToggle.addEventListener("click", toggleSound);
+  els.randomPatch.addEventListener("click", randomizePatch);
   els.sens.addEventListener("input", (e) => { applySensitivity(+e.target.value); saveStateSoon(); });
   applySensitivity(+els.sens.value);
 
@@ -812,7 +859,7 @@ async function init() {
       midi = await navigator.requestMIDIAccess({ sysex: false });
       refreshPorts();
       midi.onstatechange = refreshPorts;
-      els.portSelect.addEventListener("change", (e) => selectInput(e.target.value));
+      els.portSelect.addEventListener("change", (e) => applySelection(e.target.value));
     } catch (err) {
       setStatus(false, "permission denied");
       els.hint.innerHTML = `<p><strong>MIDI permission denied.</strong> Reload and allow MIDI access. (${err})</p>`;
