@@ -85,12 +85,13 @@ let msgCount = 0;
 
 const audio = new AudioEngine();
 
-// Rolling detection: accumulate absolute change of the ORIENTATION CCs (4-6)
-// between animation frames, then smooth into a 0..1 "speed" that drives the
-// alien bass drone. Measured on the device: idle sensor jitter is ~200-475
-// units/sec even when still, active rolling is ~900-1300/sec — so we gate above
-// the idle floor and only make sound when it's really rolling.
-const ROLL_CHANNELS = new Set([4, 5, 6]);
+// Rolling detection: accumulate absolute change of the ORIENTATION CCs (3-5,
+// i.e. X/Y/Z orientation per the ODD MIDI docs — see docs/MIDI.md) between
+// animation frames, then smooth into a 0..1 "speed" that drives the alien bass
+// drone. Measured on the device: idle sensor jitter is ~200-475 units/sec even
+// when still, active rolling is ~900-1300/sec — so we gate above the idle floor
+// and only make sound when it's really rolling.
+const ROLL_CHANNELS = new Set([3, 4, 5]);
 // Per-device CC state, keyed by MIDIInput id. When several controllers are
 // bound at once we must NOT let their streams overwrite one shared slot —
 // that makes cross-device value jumps look like huge orientation deltas and
@@ -102,10 +103,10 @@ let rollAccum = 0;
 // gesture activity & motion energy reflect fast motion instead of aliasing at
 // the animation frame rate. Drained each frame in updateGestureActivity.
 let featAccum = 0;
-let rollRate = 0;      // smoothed CC-units/sec on channels 4-6
+let rollRate = 0;      // smoothed CC-units/sec on channels 3-5
 let rollSpeed = 0;     // final gated 0..1 intensity sent to the synth
 let rollRaw = 0;       // ungated normalized rate (0..1) for the meter
-let ROLL_SCALE = 1300; // CC units/sec (on 4-6) that maps to full intensity
+let ROLL_SCALE = 1300; // CC units/sec (on 3-5) that maps to full intensity
 let ROLL_GATE = 0.5;   // fraction of ROLL_SCALE (~650/sec) below which it's silent
 let ROLL_TAU = 0.22;   // seconds; smoothing time-constant for the rate
 
@@ -127,13 +128,15 @@ const PARAMS = {
   roll_rate:  { label: "Roll rate", color: "#00e5ff", get: () => rollRaw },
   energy:     { label: "Motion energy", color: "#ffd166", get: () => lastMotion },
   tap:        { label: "Tap envelope", color: "#ff5db1", get: () => tapEnv },
-  tilt_x:     { label: "Orient X (CC0)", color: "hsl(20 75% 62%)", get: () => (cc[0] ?? 0) / 127 },
-  tilt_y:     { label: "Orient Y (CC1)", color: "hsl(65 75% 62%)", get: () => (cc[1] ?? 0) / 127 },
-  tilt_z:     { label: "Orient Z (CC2)", color: "hsl(110 75% 62%)", get: () => (cc[2] ?? 0) / 127 },
-  cc3:        { label: "Spin (CC3)", color: "hsl(155 75% 62%)", get: () => (cc[3] ?? 0) / 127 },
-  cc4:        { label: "CC4", color: "hsl(200 75% 62%)", get: () => (cc[4] ?? 0) / 127 },
-  cc5:        { label: "CC5", color: "hsl(245 75% 62%)", get: () => (cc[5] ?? 0) / 127 },
-  cc6:        { label: "CC6", color: "hsl(290 75% 62%)", get: () => (cc[6] ?? 0) / 127 },
+  // CC assignments follow the documented ODD Ball mapping (see docs/MIDI.md):
+  // CC0 Shake · CC1 Twist · CC2 Freefall · CC3-5 X/Y/Z orientation · CC6 Movement.
+  shake:      { label: "Shake (CC0)", color: "hsl(20 75% 62%)", get: () => (cc[0] ?? 0) / 127 },
+  twist:      { label: "Twist (CC1)", color: "hsl(65 75% 62%)", get: () => (cc[1] ?? 0) / 127 },
+  freefall:   { label: "Freefall (CC2)", color: "hsl(110 75% 62%)", get: () => (cc[2] ?? 0) / 127 },
+  tilt_x:     { label: "Orient X (CC3)", color: "hsl(155 75% 62%)", get: () => (cc[3] ?? 0) / 127 },
+  tilt_y:     { label: "Orient Y (CC4)", color: "hsl(200 75% 62%)", get: () => (cc[4] ?? 0) / 127 },
+  tilt_z:     { label: "Orient Z (CC5)", color: "hsl(245 75% 62%)", get: () => (cc[5] ?? 0) / 127 },
+  movement:   { label: "Movement (CC6)", color: "hsl(290 75% 62%)", get: () => (cc[6] ?? 0) / 127 },
 };
 const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
 
@@ -149,11 +152,11 @@ const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
 // extreme angle (e.g. through an arm-slingshot wind-up) and so can never mark
 // the move as finished. Delta-based activity stays low while the ball is held
 // still at any angle and spikes on the actual throw / snap / catch.
-const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // orientation + spin CCs
+const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // all gesture CCs (shake/twist/freefall + X/Y/Z orient + movement)
 const GEST_CHANNELS = new Set(GEST_DIMS); // fast lookup for the message handler
 // The PARAMS keys those dims are stored under in a recorded session file, in
 // the same order — used to rebuild feature frames when importing a session.
-const GEST_DIM_KEYS = ["tilt_x", "tilt_y", "tilt_z", "cc3", "cc4", "cc5", "cc6"];
+const GEST_DIM_KEYS = ["shake", "twist", "freefall", "tilt_x", "tilt_y", "tilt_z", "movement"];
 const GEST_N = 32;                        // template length after resampling
 const RAW_N = 96;                         // stored raw resolution (for editing/crop)
 const GEST_ACT_TAU = 0.15;                // s; smoothing for the activity signal
@@ -1702,13 +1705,14 @@ function spawnRipple(velocity) {
   setTimeout(() => r.remove(), 700);
 }
 
-// Drive the orb from whatever CCs are streaming. We use the first few
-// controllers as tilt X / tilt Y / roll, and overall motion energy for glow.
+// Drive the orb from the orientation CCs. Per docs/MIDI.md the ball reports
+// X/Y/Z orientation on CC3/4/5; we use those for tilt X / tilt Y / roll, and
+// overall motion energy for glow.
 function updateOrb() {
   const v = (c, d = 64) => (cc[c] ?? d);
-  const tiltX = (v(0) - 64) / 64;   // -1..1
-  const tiltY = (v(1) - 64) / 64;
-  const roll = (v(2) - 64) / 64;
+  const tiltX = (v(3) - 64) / 64;   // -1..1  (X orientation, CC3)
+  const tiltY = (v(4) - 64) / 64;   //         (Y orientation, CC4)
+  const roll = (v(5) - 64) / 64;    //         (Z orientation, CC5)
   // Glow tracks actual MOTION (updated each frame from gestActivity), not the
   // static tilt — so a still ball doesn't stay lit up at an angle.
   const energy = lastMotion;
@@ -1810,12 +1814,15 @@ function onMidiMessage(e) {
       { duration: 320, easing: "ease-out" }
     );
     spawnRipple(d2);
-    // Pitch follows orientation (CC3) so moving the ball plays different notes.
+    // Pitch follows X orientation (CC3) so moving the ball plays different notes.
     audio.hit(d2, (cc[3] ?? 64) / 127);
     logEvent(`<b>NOTE</b> ${noteName(d1)} (${d1}) vel ${d2}`, "note");
   } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {  // note off
     // (Quiet in the log to avoid clutter.)
   } else if (type === 0xb0) {               // control change
+    // Drop CC7: the ball emits it, but CC7 is MIDI Channel Volume and would
+    // otherwise pollute meters/gestures (and mutes DAWs). See docs/MIDI.md.
+    if (d1 === 7) return;
     const id = (e.target && e.target.id) || "_";
     const dev = deviceCc[id] || (deviceCc[id] = {});
     // Roll delta is measured within a single device only.

@@ -14,10 +14,24 @@ import time
 
 import mido
 
-# ODD Ball gesture -> MIDI mapping is documented at oddballism.com/pages/midi:
-#   Tap/bounce = Note, Shake = Note + CC, Spin = Note + CC,
-#   Air = CC (while airborne), Point = CC (like a knob).
+# ODD Ball gesture -> MIDI mapping (all on channel 1). Qualitative overview is at
+# oddballism.com/pages/midi; the concrete note/CC numbers below come from the
+# OmniMusic wiki (dated 2024-12-19) and are documented in docs/MIDI.md. They may
+# vary by firmware, so verify with --raw against your own ball.
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+# Documented gesture behind each note number and CC number.
+NOTE_GESTURE = {0: "Tap", 1: "Shake", 2: "Twist"}
+CC_GESTURE = {
+    0: "Shake",
+    1: "Twist",
+    2: "Freefall",
+    3: "X Orientation",
+    4: "Y Orientation",
+    5: "Z Orientation",
+    6: "Movement",
+    7: "!! MIDI Volume - may mute DAWs",
+}
 
 
 def note_name(note: int) -> str:
@@ -43,12 +57,17 @@ def pick_port(preferred: str | None) -> str:
 def describe(msg: mido.Message) -> str:
     if msg.type == "note_on" and msg.velocity > 0:
         bar = "#" * round(msg.velocity / 127 * 20)
-        return f"NOTE ON   {note_name(msg.note):<4} ({msg.note:>3}) vel {msg.velocity:>3} |{bar:<20}|"
+        gesture = NOTE_GESTURE.get(msg.note, "?")
+        return (
+            f"NOTE ON   {note_name(msg.note):<4} ({msg.note:>3}) vel {msg.velocity:>3} "
+            f"|{bar:<20}| {gesture}"
+        )
     if msg.type == "note_off" or (msg.type == "note_on" and msg.velocity == 0):
         return f"note off  {note_name(msg.note):<4} ({msg.note:>3})"
     if msg.type == "control_change":
         bar = "#" * round(msg.value / 127 * 20)
-        return f"CC        ctrl {msg.control:>3}      val {msg.value:>3} |{bar:<20}|"
+        gesture = CC_GESTURE.get(msg.control, "?")
+        return f"CC        ctrl {msg.control:>3}      val {msg.value:>3} |{bar:<20}| {gesture}"
     if msg.type == "pitchwheel":
         return f"PITCH     {msg.pitch}"
     return str(msg)

@@ -33,7 +33,7 @@ Then bounce, shake, spin or point the ball and watch the messages stream in.
 
 ## Gesture → MIDI mapping
 
-Per the [ODD MIDI docs](https://oddballism.com/en-us/pages/midi):
+Per the [ODD MIDI docs](https://oddballism.com/en-ww/pages/midi):
 
 | Gesture | Sends |
 | --- | --- |
@@ -42,3 +42,9 @@ Per the [ODD MIDI docs](https://oddballism.com/en-us/pages/midi):
 | Spin | Note + CC |
 | Air (in the air) | CC |
 | Point (logo up/down) | CC (like a knob) |
+
+The ball also sends concrete note/CC numbers on **channel 1** (Note 0/1/2 =
+Tap/Shake/Twist; CC0–2 = Shake/Twist/Freefall; **CC3–5 = X/Y/Z orientation**;
+CC6 = Movement). It emits **CC7**, which is MIDI Volume and can mute a DAW — both
+tools here filter it. See [`docs/MIDI.md`](docs/MIDI.md) for the full reference,
+sources, and how to verify the mapping against your own ball.
