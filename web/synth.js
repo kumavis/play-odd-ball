@@ -41,6 +41,7 @@ class AudioEngine {
       { key: "bells", label: "Shimmer bells" },
       { key: "wind", label: "Noise wind" },
       { key: "pluck", label: "Pluck arp" },
+      { key: "piano", label: "Piano walk" },
       { key: "acid", label: "Acid 303" },
       { key: "wobble", label: "Wobble bass" },
       { key: "growl", label: "Monster growl" },
@@ -95,6 +96,7 @@ class AudioEngine {
     this.voices.bells = this._buildBells();
     this.voices.wind = this._buildWind();
     this.voices.pluck = this._buildPluck();
+    this.voices.piano = this._buildPiano();
     this.voices.acid = this._buildAcid();
     this.voices.wobble = this._buildWobble();
     this.voices.growl = this._buildGrowl();
@@ -374,6 +376,60 @@ class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
     o.start(t); o.stop(t + 0.3);
     setTimeout(() => g.disconnect(), 400);
+  }
+
+  // ---- Piano walk -------------------------------------------------------
+  // An event/tap voice: every trigger plays a piano note and advances a
+  // walking position through a major scale (ping-ponging up and back down
+  // ~2 octaves). So tapping repeatedly — or holding a parameter up so it
+  // fires on the sustained clock — makes the keys being played keep changing.
+  _buildPiano() {
+    const out = this._out(); out.gain.value = 1;
+    const scale = [0, 2, 4, 5, 7, 9, 11];   // major
+    const span = 17;                        // steps up before turning back down
+    const voice = { out, level: 0, last: 0, step: 0 };
+    voice.set = (v) => {
+      if (!this._due(voice, v, 170, 820)) return;
+      const pos = voice.step % (span * 2);
+      const idx = pos <= span ? pos : span * 2 - pos;   // 0..span..0 ping-pong
+      const deg = scale[idx % scale.length] + 12 * Math.floor(idx / scale.length);
+      voice.step++;
+      const root = 48 + Math.round(v * 5);              // value nudges the register
+      this._pianoNote(mtof(root + deg), 0.1 + v * 0.28, out);
+    };
+    return voice;
+  }
+
+  _pianoNote(hz, gain, dest) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const g = ctx.createGain(); g.gain.value = 0;
+    // Brightness fades over the note (mimics upper partials decaying first).
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass";
+    lp.frequency.setValueAtTime(Math.min(12000, hz * 8), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(600, hz * 2.4), t + 1.1);
+    g.connect(lp).connect(dest);
+    const decay = 1.6 + gain;
+    for (const [mult, amp] of [[1, 1.0], [2, 0.55], [3, 0.3], [4, 0.16], [6, 0.08]]) {
+      const o = ctx.createOscillator();
+      o.type = mult === 1 ? "triangle" : "sine";
+      o.frequency.value = hz * mult * (1 + 0.0007 * mult * mult); // slight inharmonicity
+      const og = ctx.createGain(); og.gain.value = amp;
+      o.connect(og).connect(g);
+      o.start(t); o.stop(t + decay + 0.2);
+    }
+    // Hammer thock: a very short band-passed noise transient.
+    const noise = ctx.createBufferSource(); noise.buffer = this._noiseBuffer(0.04);
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = hz * 3; bp.Q.value = 0.7;
+    const ng = ctx.createGain(); ng.gain.value = 0;
+    noise.connect(bp).connect(ng).connect(g);
+    ng.gain.setValueAtTime(gain * 0.6, t);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+    noise.start(t); noise.stop(t + 0.06);
+    // Master envelope: quick hammer attack, long exponential release.
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    setTimeout(() => g.disconnect(), (decay + 0.3) * 1000);
   }
 
   // ---- Shared helpers for the extra voices ------------------------------
