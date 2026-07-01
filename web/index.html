@@ -35,9 +35,17 @@
     <section class="patchbay">
       <div class="patch-head">
         <h2>Patch bay <span class="hint-inline">click a parameter then an instrument to connect (or drag) · click a cable to edit</span></h2>
+        <div id="patchViews" class="patch-views">
+          <button class="pv-btn is-active" data-patchview="rack" title="Classic rack view">▤ Rack</button>
+          <button class="pv-btn" data-patchview="orbit" title="Force-directed orbit view">✷ Orbit</button>
+        </div>
       </div>
       <div id="graph" class="graph">
         <svg id="graphSvg" class="graph-svg"></svg>
+      </div>
+      <div id="orbit" class="orbit orbit--hidden">
+        <canvas id="orbitCanvas" class="orbit-canvas"></canvas>
+        <div class="orbit-hint">drag the halo dot on a signal onto a triangle to patch it · click a cable to edit · drag nodes to rearrange</div>
       </div>
 
       <div id="histDock" class="hist-dock hist-dock--collapsed">

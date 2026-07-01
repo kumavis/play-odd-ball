@@ -37,6 +37,9 @@ const els = {
   sens: document.getElementById("sens"),
   sensVal: document.getElementById("sensVal"),
   graph: document.getElementById("graph"),
+  orbit: document.getElementById("orbit"),
+  orbitCanvas: document.getElementById("orbitCanvas"),
+  patchViews: document.getElementById("patchViews"),
   histDock: document.getElementById("histDock"),
   histToggle: document.getElementById("histToggle"),
   histCanvas: document.getElementById("histCanvas"),
@@ -1464,6 +1467,7 @@ function serializeState() {
     sound: soundIntent,
     views,
     histOpen: !els.histDock.classList.contains("hist-dock--collapsed"),
+    patchView: orbit.active ? "orbit" : "rack",
   };
 }
 
@@ -1902,6 +1906,7 @@ function rebuildGraph() {
   clearLink();
   buildGraph();
   buildHistLegend();
+  if (orbit.built) buildOrbit();
 }
 
 function layoutGraph() {
@@ -2254,6 +2259,478 @@ function updateInstruments() {
     els.ceMeterIn.style.width = `${clamp1(paramValue(conn.source)) * 100}%`;
     els.ceMeterOut.style.width = `${clamp1(shape(conn, editing)) * 100}%`;
   }
+}
+
+// ---- Orbit view: force-directed patch diagram ---------------------------
+// An alternate read/write layout of the same patch. The ODD ball is a big node
+// at the centre; every modulation signal (PARAMS) is a satellite orbiting it,
+// each drawing its own labelled live histogram and ending in a little output
+// port. Instruments are triangular targets that drift on the outer ring, and a
+// patched connection is a cable pulling its instrument in toward the driving
+// satellite. A light spring/repulsion simulation keeps it all arranged.
+const orbit = {
+  active: false,
+  ctx: null,
+  w: 0, h: 0, dpr: 1,
+  nodes: [],
+  byKey: {},
+  ball: null,
+  drag: null,          // { node, ox, oy, moved }
+  link: null,          // { fromKey, x, y, over }
+  built: false,
+};
+
+// Simulation tuning (per-frame units; forces are unit-less pushes on velocity).
+const ORB = {
+  REP: 2600,           // pairwise repulsion strength
+  REP_MAX: 3.2,        // cap on a single repulsion push
+  OVERLAP: 0.55,       // extra shove when two nodes overlap
+  K_ORBIT: 0.010,      // satellite ↔ ball spring
+  K_LINK: 0.020,       // instrument ↔ its driving satellite
+  K_IDLE: 0.006,       // unpatched instrument ↔ ball (loose outer ring)
+  DAMP: 0.85,
+  MAXV: 20,
+  RING: 0.27,          // satellite ring radius (× min(w,h))
+  OUT: 0.45,           // idle instrument ring radius (× min(w,h))
+  LINK_LEN: 118,
+};
+
+function initOrbit() {
+  orbit.ctx = els.orbitCanvas.getContext("2d");
+  els.orbitCanvas.addEventListener("pointerdown", onOrbitDown);
+}
+
+function resizeOrbit() {
+  const cv = els.orbitCanvas;
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return false;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+  }
+  orbit.w = w; orbit.h = h; orbit.dpr = dpr;
+  orbit.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return true;
+}
+
+// (Re)build the node set from the current PARAMS + INSTRUMENTS, preserving the
+// live positions of anything that already existed (so adding a gesture source
+// doesn't scatter the whole diagram).
+function buildOrbit() {
+  const prev = orbit.byKey || {};
+  const w = orbit.w || els.orbitCanvas.clientWidth || 860;
+  const h = orbit.h || els.orbitCanvas.clientHeight || 520;
+  const cx = w / 2, cy = h / 2;
+  const R = Math.max(120, Math.min(w, h));
+  const nodes = [], byKey = {};
+
+  let ball = orbit.ball || { type: "ball", key: "__ball", vx: 0, vy: 0 };
+  ball.type = "ball"; ball.label = "ODD"; ball.color = "#00e5ff";
+  ball.x = cx; ball.y = cy; ball.vx = 0; ball.vy = 0; ball.r = 46; ball.rep = 3.4;
+  orbit.ball = ball; nodes.push(ball);
+
+  const pk = Object.keys(PARAMS);
+  pk.forEach((key, i) => {
+    const id = "p:" + key;
+    const a = (i / pk.length) * Math.PI * 2 - Math.PI / 2;
+    const n = prev[id] || {
+      vx: 0, vy: 0,
+      x: cx + Math.cos(a) * R * ORB.RING,
+      y: cy + Math.sin(a) * R * ORB.RING,
+    };
+    n.type = "param"; n.key = key; n.label = PARAMS[key].label; n.color = PARAMS[key].color;
+    n.pw = 90; n.ph = 52; n.r = 46; n.rep = 1.35;
+    byKey[id] = n; nodes.push(n);
+  });
+
+  INSTRUMENTS.forEach((inst, i) => {
+    const id = "i:" + inst.key;
+    const a = (i / INSTRUMENTS.length) * Math.PI * 2;
+    const n = prev[id] || {
+      vx: 0, vy: 0,
+      x: cx + Math.cos(a) * R * ORB.OUT,
+      y: cy + Math.sin(a) * R * ORB.OUT,
+    };
+    n.type = "inst"; n.key = inst.key; n.label = inst.label; n.r = 21; n.rep = 0.85;
+    byKey[id] = n; nodes.push(n);
+  });
+
+  orbit.nodes = nodes; orbit.byKey = byKey; orbit.built = true;
+}
+
+// Pull node `n` toward `target` so its distance relaxes to `rest`.
+function orbSpring(n, target, rest, k) {
+  let dx = target.x - n.x, dy = target.y - n.y;
+  let d = Math.hypot(dx, dy) || 0.001;
+  const f = (d - rest) * k;
+  n.fx += (dx / d) * f;
+  n.fy += (dy / d) * f;
+}
+
+function stepOrbit() {
+  const N = orbit.nodes;
+  if (!N.length) return;
+  const cx = orbit.w / 2, cy = orbit.h / 2;
+  const R = Math.max(120, Math.min(orbit.w, orbit.h));
+  const ringR = R * ORB.RING, outR = R * ORB.OUT;
+
+  if (orbit.ball && (!orbit.drag || orbit.drag.node !== orbit.ball)) {
+    orbit.ball.x = cx; orbit.ball.y = cy; orbit.ball.vx = 0; orbit.ball.vy = 0;
+  }
+  for (const n of N) { n.fx = 0; n.fy = 0; }
+
+  for (let i = 0; i < N.length; i++) {
+    for (let j = i + 1; j < N.length; j++) {
+      const a = N[i], b = N[j];
+      let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
+      if (d2 < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d2 = dx * dx + dy * dy + 0.01; }
+      const d = Math.sqrt(d2);
+      let f = Math.min(ORB.REP_MAX, ORB.REP * (a.rep || 1) * (b.rep || 1) / d2);
+      const minD = a.r + b.r;
+      if (d < minD) f += (minD - d) * ORB.OVERLAP;
+      const ux = dx / d, uy = dy / d;
+      a.fx += ux * f; a.fy += uy * f;
+      b.fx -= ux * f; b.fy -= uy * f;
+    }
+  }
+
+  for (const n of N) {
+    if (n.type === "param") {
+      orbSpring(n, orbit.ball, ringR, ORB.K_ORBIT);
+    } else if (n.type === "inst") {
+      const conn = connections[n.key];
+      const src = conn && orbit.byKey["p:" + conn.source];
+      if (src) orbSpring(n, src, ORB.LINK_LEN, ORB.K_LINK);
+      else orbSpring(n, orbit.ball, outR, ORB.K_IDLE);
+    }
+  }
+
+  for (const n of N) {
+    if (n === orbit.ball) continue;
+    if (orbit.drag && orbit.drag.node === n) continue;
+    n.vx = (n.vx + n.fx) * ORB.DAMP;
+    n.vy = (n.vy + n.fy) * ORB.DAMP;
+    const sp = Math.hypot(n.vx, n.vy);
+    if (sp > ORB.MAXV) { n.vx *= ORB.MAXV / sp; n.vy *= ORB.MAXV / sp; }
+    n.x += n.vx; n.y += n.vy;
+    const m = n.r + 4;
+    if (n.x < m) { n.x = m; n.vx *= -0.4; }
+    if (n.x > orbit.w - m) { n.x = orbit.w - m; n.vx *= -0.4; }
+    if (n.y < m) { n.y = m; n.vy *= -0.4; }
+    if (n.y > orbit.h - m) { n.y = orbit.h - m; n.vy *= -0.4; }
+  }
+}
+
+// The little output port sits on the satellite edge facing away from the ball.
+function orbPortOut(n) {
+  const a = Math.atan2(n.y - orbit.ball.y, n.x - orbit.ball.x);
+  return { x: n.x + Math.cos(a) * (n.pw / 2 + 4), y: n.y + Math.sin(a) * (n.ph / 2) };
+}
+// An instrument takes its cable on the edge facing the ball.
+function orbPortIn(n) {
+  const a = Math.atan2(orbit.ball.y - n.y, orbit.ball.x - n.x);
+  return { x: n.x + Math.cos(a) * n.r, y: n.y + Math.sin(a) * n.r };
+}
+
+function orbCablePath(ctx, a, b, color, width, alpha) {
+  const mx = (a.x + b.x) / 2;
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.bezierCurveTo(mx, a.y, mx, b.y, b.x, b.y);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = alpha;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+const ORB_BARS = 18;
+function drawSatellite(ctx, n) {
+  const val = clamp1(paramValue(n.key));
+  const x = n.x - n.pw / 2, y = n.y - n.ph / 2, w = n.pw, h = n.ph;
+  ctx.save();
+  // card
+  roundRectPath(ctx, x, y, w, h, 9);
+  ctx.fillStyle = "rgba(20,23,40,0.92)";
+  ctx.fill();
+  ctx.lineWidth = 1.4 + val * 2.2;
+  ctx.strokeStyle = n.color;
+  ctx.globalAlpha = 0.55 + val * 0.45;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // label
+  ctx.fillStyle = "#c9cdf0";
+  ctx.font = "600 9px system-ui, sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  const label = n.label.length > 15 ? n.label.slice(0, 14) + "…" : n.label;
+  ctx.fillText(label, x + 8, y + 6);
+  // labelled histogram
+  const hx = x + 8, hy = y + 19, hw = w - 16, hh = h - 26;
+  const buf = sparkBuf[n.key];
+  if (buf && buf.length > 1) {
+    const bw = hw / ORB_BARS;
+    for (let bxi = 0; bxi < ORB_BARS; bxi++) {
+      const lo = Math.floor((bxi / ORB_BARS) * buf.length);
+      const hi = Math.max(lo + 1, Math.floor(((bxi + 1) / ORB_BARS) * buf.length));
+      let m = 0;
+      for (let k = lo; k < hi && k < buf.length; k++) m = Math.max(m, buf[k]);
+      const bh = Math.max(1, clamp1(m) * hh);
+      ctx.fillStyle = n.color;
+      ctx.globalAlpha = 0.3 + clamp1(m) * 0.6;
+      ctx.fillRect(hx + bxi * bw + 0.5, hy + hh - bh, Math.max(1, bw - 1), bh);
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+  // output port
+  const p = orbPortOut(n);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+  ctx.fillStyle = "#0c0e1a";
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = n.color;
+  ctx.stroke();
+}
+
+function drawTriangle(ctx, n) {
+  const conn = connections[n.key];
+  const on = !!conn;
+  const v = on ? shape(conn, n.key) : 0;
+  const col = on ? (PARAMS[conn.source] ? PARAMS[conn.source].color : "#8b90b8") : "#6b7099";
+  const a = Math.atan2(n.y - orbit.ball.y, n.x - orbit.ball.x); // apex points outward
+  const r = n.r;
+  ctx.save();
+  ctx.translate(n.x, n.y);
+  ctx.rotate(a);
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.lineTo(-r * 0.7, r * 0.82);
+  ctx.lineTo(-r * 0.7, -r * 0.82);
+  ctx.closePath();
+  ctx.fillStyle = on ? "rgba(24,27,46,0.96)" : "rgba(20,22,36,0.7)";
+  ctx.fill();
+  ctx.lineWidth = 1.5 + v * 3;
+  ctx.strokeStyle = col;
+  ctx.globalAlpha = on ? 0.7 + v * 0.3 : 0.5;
+  ctx.stroke();
+  if (v > 0.02) {
+    ctx.globalAlpha = v * 0.5;
+    ctx.fillStyle = col; ctx.fill();
+  }
+  ctx.restore();
+  // label just outside the apex
+  const lx = n.x + Math.cos(a) * (r + 9), ly = n.y + Math.sin(a) * (r + 9);
+  ctx.save();
+  ctx.font = "600 9.5px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = Math.cos(a) < -0.2 ? "right" : (Math.cos(a) > 0.2 ? "left" : "center");
+  ctx.fillStyle = on ? "#e9ecff" : "#8b90b8";
+  ctx.globalAlpha = orbit.link && orbit.link.over === n ? 1 : 0.92;
+  ctx.fillText(n.label, lx, ly);
+  ctx.restore();
+}
+
+function drawBall(ctx, n) {
+  const g = ctx.createRadialGradient(n.x - n.r * 0.3, n.y - n.r * 0.3, n.r * 0.2, n.x, n.y, n.r);
+  g.addColorStop(0, "#eafcff");
+  g.addColorStop(0.4, "#00e5ff");
+  g.addColorStop(1, "#5a2fe0");
+  ctx.save();
+  ctx.shadowColor = "rgba(0,229,255,0.5)";
+  ctx.shadowBlur = 26;
+  ctx.beginPath();
+  ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "rgba(6,8,18,0.85)";
+  ctx.font = "800 15px system-ui, sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("ODD", n.x, n.y);
+}
+
+function drawOrbit() {
+  const ctx = orbit.ctx;
+  if (!ctx) return;
+  ctx.clearRect(0, 0, orbit.w, orbit.h);
+
+  // faint orbital guide ring
+  const R = Math.max(120, Math.min(orbit.w, orbit.h));
+  ctx.beginPath();
+  ctx.arc(orbit.ball.x, orbit.ball.y, R * ORB.RING, 0, Math.PI * 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.05)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // cables (behind nodes)
+  for (const inst of INSTRUMENTS) {
+    const conn = connections[inst.key];
+    if (!conn) continue;
+    const src = orbit.byKey["p:" + conn.source];
+    const dst = orbit.byKey["i:" + inst.key];
+    if (!src || !dst) continue;
+    const v = shape(conn, inst.key);
+    orbCablePath(ctx, orbPortOut(src), orbPortIn(dst),
+      PARAMS[conn.source].color, 1.5 + v * 5, 0.28 + v * 0.7);
+    if (editing === inst.key) {
+      orbCablePath(ctx, orbPortOut(src), orbPortIn(dst), "#ffffff", 1.2, 0.5);
+    }
+  }
+
+  // in-progress link
+  if (orbit.link) {
+    const src = orbit.byKey["p:" + orbit.link.fromKey];
+    if (src) {
+      const from = orbPortOut(src);
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      orbCablePath(ctx, from, { x: orbit.link.x, y: orbit.link.y }, src.color, 2.5, 0.9);
+      ctx.restore();
+    }
+  }
+
+  drawBall(ctx, orbit.ball);
+  for (const n of orbit.nodes) if (n.type === "inst") drawTriangle(ctx, n);
+  for (const n of orbit.nodes) if (n.type === "param") drawSatellite(ctx, n);
+}
+
+// ---- Orbit pointer interaction ----
+function orbitPoint(e) {
+  const r = els.orbitCanvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function orbHitInst(x, y) {
+  for (const n of orbit.nodes) {
+    if (n.type !== "inst") continue;
+    if (Math.hypot(x - n.x, y - n.y) <= n.r + 6) return n;
+  }
+  return null;
+}
+
+function orbTopNode(x, y) {
+  // params first (drawn on top), then instruments, then ball
+  for (const n of orbit.nodes) {
+    if (n.type !== "param") continue;
+    if (Math.abs(x - n.x) <= n.pw / 2 && Math.abs(y - n.y) <= n.ph / 2) return n;
+  }
+  const inst = orbHitInst(x, y);
+  if (inst) return inst;
+  if (Math.hypot(x - orbit.ball.x, y - orbit.ball.y) <= orbit.ball.r) return orbit.ball;
+  return null;
+}
+
+// Distance from a point to a connection's cable, for click-to-edit. Samples the
+// same cubic bezier that orbCablePath draws (control points at the mid-x).
+function orbCableAt(x, y) {
+  let best = null, bestD = 9;
+  for (const inst of INSTRUMENTS) {
+    const conn = connections[inst.key];
+    if (!conn) continue;
+    const src = orbit.byKey["p:" + conn.source];
+    const dst = orbit.byKey["i:" + inst.key];
+    if (!src || !dst) continue;
+    const a = orbPortOut(src), b = orbPortIn(dst), mx = (a.x + b.x) / 2;
+    const c1 = { x: mx, y: a.y }, c2 = { x: mx, y: b.y };
+    for (let t = 0; t <= 1; t += 0.04) {
+      const it = 1 - t;
+      const w0 = it * it * it, w1 = 3 * it * it * t, w2 = 3 * it * t * t, w3 = t * t * t;
+      const px = w0 * a.x + w1 * c1.x + w2 * c2.x + w3 * b.x;
+      const py = w0 * a.y + w1 * c1.y + w2 * c2.y + w3 * b.y;
+      const d = Math.hypot(x - px, y - py);
+      if (d < bestD) { bestD = d; best = inst.key; }
+    }
+  }
+  return best;
+}
+
+function onOrbitDown(e) {
+  if (!orbit.active) return;
+  const p = orbitPoint(e);
+  e.preventDefault();
+
+  // 1. output port of a satellite → begin a patch cable
+  for (const n of orbit.nodes) {
+    if (n.type !== "param") continue;
+    const port = orbPortOut(n);
+    if (Math.hypot(p.x - port.x, p.y - port.y) <= 11) {
+      orbit.link = { fromKey: n.key, x: p.x, y: p.y, over: null };
+      window.addEventListener("pointermove", onOrbitMove);
+      window.addEventListener("pointerup", onOrbitUp);
+      return;
+    }
+  }
+
+  // 2. a node body → drag it around
+  const node = orbTopNode(p.x, p.y);
+  if (node) {
+    orbit.drag = { node, ox: p.x - node.x, oy: p.y - node.y, downX: p.x, downY: p.y };
+    node.vx = 0; node.vy = 0;
+    window.addEventListener("pointermove", onOrbitMove);
+    window.addEventListener("pointerup", onOrbitUp);
+    return;
+  }
+
+  // 3. a cable → open its connection editor
+  const inst = orbCableAt(p.x, p.y);
+  if (inst) openEditor(inst, e.clientX, e.clientY);
+}
+
+function onOrbitMove(e) {
+  const p = orbitPoint(e);
+  if (orbit.link) {
+    orbit.link.x = p.x; orbit.link.y = p.y;
+    orbit.link.over = orbHitInst(p.x, p.y);
+  } else if (orbit.drag) {
+    const n = orbit.drag.node;
+    n.x = p.x - orbit.drag.ox;
+    n.y = p.y - orbit.drag.oy;
+    n.vx = 0; n.vy = 0;
+  }
+}
+
+function onOrbitUp(e) {
+  window.removeEventListener("pointermove", onOrbitMove);
+  window.removeEventListener("pointerup", onOrbitUp);
+  const p = orbitPoint(e);
+  if (orbit.link) {
+    const inst = orbHitInst(p.x, p.y);
+    if (inst && PARAMS[orbit.link.fromKey]) connect(orbit.link.fromKey, inst.key);
+    orbit.link = null;
+  } else if (orbit.drag) {
+    const d = orbit.drag; orbit.drag = null;
+    const moved = Math.hypot(p.x - d.downX, p.y - d.downY) > 5;
+    if (!moved && d.node.type === "inst") previewInstrument(d.node.key);
+    else if (moved) saveStateSoon();
+  }
+}
+
+function setPatchView(mode) {
+  orbit.active = mode === "orbit";
+  els.graph.classList.toggle("graph--hidden", orbit.active);
+  els.orbit.classList.toggle("orbit--hidden", !orbit.active);
+  els.patchViews.querySelectorAll(".pv-btn").forEach((b) =>
+    b.classList.toggle("is-active", b.dataset.patchview === mode));
+  if (orbit.active) {
+    resizeOrbit();
+    if (!orbit.built) buildOrbit();
+  } else {
+    layoutGraph();
+  }
+  saveStateSoon();
 }
 
 function renderRoll() {
@@ -2658,6 +3135,7 @@ async function init() {
 
   buildGraph();
   wireGraphEvents();
+  initOrbit();
   renderGestures();
   renderProfiles();
   audio.chimesOn = !!connections.chimes;
@@ -2665,6 +3143,13 @@ async function init() {
   if (saved && saved.views) {
     for (const v in saved.views) setView(v, !!saved.views[v]);
   }
+
+  els.patchViews.addEventListener("click", (e) => {
+    const btn = e.target.closest(".pv-btn");
+    if (btn) setPatchView(btn.dataset.patchview);
+  });
+  setPatchView(saved && saved.patchView === "orbit" ? "orbit" : "rack");
+  window.addEventListener("resize", () => { if (orbit.active) resizeOrbit(); });
 
   setupHistory();
   if (saved && typeof saved.histOpen === "boolean") setHistOpen(saved.histOpen);
@@ -2906,7 +3391,11 @@ async function init() {
     updateInstruments();
     renderRoll();
     sampleSparks();
-    drawSparks();
+    if (orbit.active) {
+      if (resizeOrbit()) { if (!orbit.built) buildOrbit(); stepOrbit(); drawOrbit(); }
+    } else {
+      drawSparks();
+    }
     drawHistory();
     updateEditorLive();
     sampleSession(now);
