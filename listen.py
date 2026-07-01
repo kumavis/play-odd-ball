@@ -51,6 +51,11 @@ def pick_port(preferred: str | None) -> str:
     for p in ports:
         if "odd" in p.lower():
             return p
+    print(
+        f"note: no port looks like an ODD Ball; falling back to {ports[0]!r}. "
+        "Use --port to pick a different one.",
+        file=sys.stderr,
+    )
     return ports[0]
 
 
@@ -92,12 +97,32 @@ def main() -> None:
     print(f"Listening on: {port_name}")
     print("Bounce, shake, spin or point the ball. Press Ctrl+C to stop.\n")
 
+    # Housekeeping messages some BLE devices stream constantly; not worth printing.
+    ignored_types = {"clock", "active_sensing"}
+    # The ball's radio sleeps after sitting idle, and a vanished port looks
+    # exactly like an idle ball — surface the silence instead of hanging mutely.
+    idle_hint_s = 30.0
+
     count = 0
     start = time.monotonic()
+    last_msg = time.monotonic()
+    idle_hinted = False
     with mido.open_input(port_name) as inport:
         try:
-            for msg in inport:
-                if msg.type == "clock":
+            while True:
+                msg = inport.poll()
+                if msg is None:
+                    if not idle_hinted and time.monotonic() - last_msg >= idle_hint_s:
+                        idle_hinted = True
+                        print(
+                            f"(no messages for {idle_hint_s:.0f}s — the ball sleeps when "
+                            "idle; bounce it, or check that it is still connected)"
+                        )
+                    time.sleep(0.005)
+                    continue
+                last_msg = time.monotonic()
+                idle_hinted = False
+                if msg.type in ignored_types:
                     continue
                 count += 1
                 t = time.monotonic() - start
