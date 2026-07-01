@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ODD Ball · Live MIDI Visualizer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <h1>ODD Ball <span>· live visualizer</span></h1>
+    </div>
+    <div class="controls">
+      <button id="soundToggle" class="sound-btn sound-btn--off">🔇 Sound off</button>
+      <select id="portSelect" title="MIDI input port"></select>
+      <span id="status" class="status status--off">disconnected</span>
+      <span id="rate" class="rate">0 msg/s</span>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="orb-panel">
+      <div class="orb-scene">
+        <div id="ripples" class="ripples"></div>
+        <div id="orb" class="orb">
+          <div class="orb-gloss"></div>
+          <div class="orb-logo">ODD</div>
+        </div>
+        <div id="shadow" class="orb-shadow"></div>
+      </div>
+      <div class="note-readout">
+        <div class="note-big" id="lastNote">—</div>
+        <div class="note-sub" id="lastNoteSub">waiting for a tap…</div>
+      </div>
+    </section>
+
+    <section class="data-panel">
+      <h2>Patch bay <span class="hint-inline">drag parameter → instrument</span></h2>
+      <div id="graph" class="graph">
+        <svg id="graphSvg" class="graph-svg"></svg>
+      </div>
+
+      <h2>Roll speed</h2>
+      <div class="roll">
+        <div class="cc-row">
+          <div class="cc-label">speed</div>
+          <div class="cc-track roll-track">
+            <div id="rollFill" class="cc-fill"></div>
+            <div id="gateMark" class="gate-mark" title="bass triggers past here"></div>
+          </div>
+          <div id="rollVal" class="cc-val">0</div>
+        </div>
+        <div class="cc-row">
+          <div class="cc-label">sensitivity</div>
+          <input id="sens" class="sens" type="range" min="0" max="100" value="45" />
+          <div id="sensVal" class="cc-val">45</div>
+        </div>
+        <div id="rollRate" class="roll-rate">idle</div>
+      </div>
+
+      <h2>Control Change · live</h2>
+      <div id="ccMeters" class="cc-meters"></div>
+
+      <h2 class="collapse-head">Activity <button id="logToggle" class="mini-toggle">show</button></h2>
+      <div id="log" class="log log--hidden"></div>
+    </section>
+
+    <section class="history-panel">
+      <div class="hist-head">
+        <h2>History</h2>
+        <div id="histLegend" class="hist-legend"></div>
+      </div>
+      <canvas id="histCanvas" class="hist-canvas"></canvas>
+    </section>
+  </main>
+
+  <div id="hint" class="hint">
+    <p><strong>Web MIDI permission needed.</strong> Use Chrome or Edge, pick the <code>ODD 1 Bluetooth</code> port above, then bounce / shake / spin the ball.</p>
+  </div>
+
+  <script src="synth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
