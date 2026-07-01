@@ -32,6 +32,7 @@ class AudioEngine {
       { key: "bass", label: "Alien bass" },
       { key: "engine", label: "Revving engine" },
       { key: "thunder", label: "Thunderstorm" },
+      { key: "thunderclap", label: "Thunderclap" },
       { key: "lightning", label: "Lightning strike" },
       { key: "rain", label: "Rainfall" },
       { key: "theremin", label: "Theremin" },
@@ -87,6 +88,7 @@ class AudioEngine {
     this.voices.bass = this._buildBass();
     this.voices.engine = this._buildEngine();
     this.voices.thunder = this._buildThunder();
+    this.voices.thunderclap = this._buildThunderclap();
     this.voices.lightning = this._buildLightning();
     this.voices.rain = this._buildRain();
     this.voices.theremin = this._buildTheremin();
@@ -632,6 +634,61 @@ class AudioEngine {
       crackGain.disconnect(); og.disconnect(); subG.disconnect();
       boomG.disconnect(); rg.disconnect();
     }, 3600);
+  }
+
+  // ---- Thunderclap ------------------------------------------------------
+  // An event voice: one sharp, CLOSE crack-boom per trigger (no distance
+  // delay), meant to fire right before the lightning strike. Punchy and short
+  // so the bolt lands right on its tail.
+  _buildThunderclap() {
+    const out = this._out(); out.gain.value = 1;
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => { if (this._due(voice, v, 320, 2400)) this._thunderclap(out, v); };
+    return voice;
+  }
+
+  _thunderclap(dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const level = 0.55 + v * 0.8;
+
+    // 1) The rip/crack: bright distorted noise transient with a razor attack.
+    const crack = ctx.createBufferSource(); crack.buffer = this._noiseBuffer(0.5);
+    const chp = ctx.createBiquadFilter(); chp.type = "highpass"; chp.frequency.value = 750;
+    chp.frequency.exponentialRampToValueAtTime(220, t + 0.18);
+    const csh = ctx.createWaveShaper(); csh.curve = this._shaper(10);
+    const crackG = ctx.createGain(); crackG.gain.value = 0;
+    crack.connect(chp).connect(csh).connect(crackG).connect(dest);
+    crackG.gain.setValueAtTime(0.0001, t);
+    crackG.gain.linearRampToValueAtTime(level * 1.2, t + 0.004);   // instant snap
+    crackG.gain.exponentialRampToValueAtTime(level * 0.3, t + 0.09);
+    crackG.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    crack.start(t); crack.stop(t + 0.5);
+
+    // 2) Concussive boom body: low distorted noise, arrives immediately (close).
+    const boom = ctx.createBufferSource(); boom.buffer = this._noiseBuffer(1.4);
+    const blp = ctx.createBiquadFilter(); blp.type = "lowpass"; blp.Q.value = 3;
+    blp.frequency.setValueAtTime(700, t);
+    blp.frequency.exponentialRampToValueAtTime(70, t + 0.9);
+    const bsh = ctx.createWaveShaper(); bsh.curve = this._shaper(7);
+    const boomG = ctx.createGain(); boomG.gain.value = 0;
+    boom.connect(blp).connect(bsh).connect(boomG).connect(dest);
+    boomG.gain.setValueAtTime(0.0001, t);
+    boomG.gain.linearRampToValueAtTime(level, t + 0.02);
+    boomG.gain.exponentialRampToValueAtTime(0.0001, t + 1.2);
+    boom.start(t); boom.stop(t + 1.4);
+
+    // 3) Sub thump: the chest-hitting low end of a nearby clap.
+    const sub = ctx.createOscillator(); sub.type = "sine";
+    sub.frequency.setValueAtTime(84, t);
+    sub.frequency.exponentialRampToValueAtTime(30, t + 0.55);
+    const subG = ctx.createGain(); subG.gain.value = 0;
+    sub.connect(subG).connect(dest);
+    subG.gain.setValueAtTime(0.0001, t);
+    subG.gain.linearRampToValueAtTime(level * 1.15, t + 0.015);
+    subG.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+    sub.start(t); sub.stop(t + 0.9);
+
+    setTimeout(() => { crackG.disconnect(); boomG.disconnect(); subG.disconnect(); }, 1800);
   }
 
   // ---- Rainfall (gentle) ------------------------------------------------
