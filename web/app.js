@@ -228,10 +228,15 @@ function seqConfig(source) {
 }
 
 // A source plays its instruments one-after-another when it's a recorded gesture
-// (always) or a plain input the user switched into "sequence" mode.
+// (always) or a plain input the user switched into "sequence" mode. A plain
+// input only counts as sequenced while it drives at least two instruments: the
+// onset loop never fires a chain for a lone instrument, so treating that case
+// as sequenced would leave it reading a trigger envelope that never rises —
+// i.e. permanently silent. With one instrument it plays continuously instead.
 function sourceSequenced(source) {
   if (isGestureSource(source)) return true;
-  return !!(seqCfg[source] && seqCfg[source].mode === "sequence");
+  if (!seqCfg[source] || seqCfg[source].mode !== "sequence") return false;
+  return siblingsOf(source).length >= 2;
 }
 
 function seqGapFor(source) {
