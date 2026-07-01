@@ -19,6 +19,9 @@ const els = {
   soundToggle: document.getElementById("soundToggle"),
   randomPatch: document.getElementById("randomPatch"),
   clearPatch: document.getElementById("clearPatch"),
+  saveProfile: document.getElementById("saveProfile"),
+  saveProfilePanel: document.getElementById("saveProfilePanel"),
+  profileList: document.getElementById("profileList"),
   rollFill: document.getElementById("rollFill"),
   rollVal: document.getElementById("rollVal"),
   gateMark: document.getElementById("gateMark"),
@@ -410,16 +413,43 @@ function deleteGesture(id) {
   renderGestures();
 }
 
+// Compact, serializable form of the current moves (used for both localStorage
+// and embedding a snapshot inside a saved profile).
+function serializeGestures() {
+  return gestures.map((g) => ({
+    id: g.id, name: g.name, color: g.color,
+    threshold: g.threshold, cooldown: g.cooldown,
+    crop: g.crop,
+    raw: g.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
+  }));
+}
+
+// Rebuild a full gesture (with a computed template) from stored/profile data.
+// Returns null for anything malformed so bad entries can never break the graph.
+function gestureFromData(g) {
+  if (!g) return null;
+  // New format stores raw + crop; migrate the old template-only format by
+  // treating the stored template as the raw capture.
+  let raw = Array.isArray(g.raw) ? g.raw : (Array.isArray(g.template) ? g.template : null);
+  if (!raw || !raw.length || !Array.isArray(raw[0])) return null;
+  raw = resample(raw, RAW_N);
+  let crop = g.crop && typeof g.crop.start === "number" && typeof g.crop.end === "number"
+    ? { start: Math.max(0, Math.min(RAW_N - 1, g.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, g.crop.end)) }
+    : { start: 0, end: RAW_N - 1 };
+  if (crop.end <= crop.start) crop = { start: 0, end: RAW_N - 1 };
+  return {
+    id: g.id, name: g.name || "Move",
+    color: g.color || GEST_PALETTE[0],
+    threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
+    cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
+    raw, crop,
+    template: makeTemplate(raw, crop),
+  };
+}
+
 function persistGestures() {
   try {
-    // Round raw values to keep stored JSON compact.
-    const data = gestures.map((g) => ({
-      id: g.id, name: g.name, color: g.color,
-      threshold: g.threshold, cooldown: g.cooldown,
-      crop: g.crop,
-      raw: g.raw.map((r) => r.map((v) => +v.toFixed(4))),
-    }));
-    localStorage.setItem(GESTURE_KEY, JSON.stringify(data));
+    localStorage.setItem(GESTURE_KEY, JSON.stringify(serializeGestures()));
   } catch (e) { /* storage unavailable — ignore */ }
 }
 
@@ -427,26 +457,7 @@ function loadGestures() {
   let data = null;
   try { data = JSON.parse(localStorage.getItem(GESTURE_KEY) || "null"); } catch (e) { data = null; }
   if (!Array.isArray(data)) return;
-  gestures = data.map((g) => {
-    if (!g) return null;
-    // New format stores raw + crop; migrate the old template-only format by
-    // treating the stored template as the raw capture.
-    let raw = Array.isArray(g.raw) ? g.raw : (Array.isArray(g.template) ? g.template : null);
-    if (!raw || !raw.length || !Array.isArray(raw[0])) return null;
-    raw = resample(raw, RAW_N);
-    let crop = g.crop && typeof g.crop.start === "number" && typeof g.crop.end === "number"
-      ? { start: Math.max(0, Math.min(RAW_N - 1, g.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, g.crop.end)) }
-      : { start: 0, end: RAW_N - 1 };
-    if (crop.end <= crop.start) crop = { start: 0, end: RAW_N - 1 };
-    return {
-      id: g.id, name: g.name || "Move",
-      color: g.color || GEST_PALETTE[0],
-      threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
-      cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
-      raw, crop,
-      template: makeTemplate(raw, crop),
-    };
-  }).filter(Boolean);
+  gestures = data.map(gestureFromData).filter(Boolean);
   for (const g of gestures) registerGestureParam(g);
 }
 
@@ -781,6 +792,125 @@ function applySensitivity(pct) {
   ROLL_SCALE = 1800 - 1050 * s;    // ~1800/sec -> ~750/sec to hit full
   if (els.sensVal) els.sensVal.textContent = Math.round(pct);
   if (els.gateMark) els.gateMark.style.left = `${ROLL_GATE * 100}%`;
+}
+
+// ---- Saved profiles: snapshot the whole movement→sound layout ------------
+// A profile bundles the patch connections, the moves themselves (so it's
+// self-contained and reloading it recreates the gesture triggers) and the
+// roll sensitivity. Stored as a named list in localStorage.
+const PROFILE_KEY = "oddball.profiles.v1";
+let profiles = [];
+
+function serializeConnections() {
+  const out = {};
+  for (const k in connections) {
+    const c = connections[k];
+    out[k] = c ? { source: c.source, atten: c.atten, thresh: c.thresh } : null;
+  }
+  return out;
+}
+
+function loadProfiles() {
+  try {
+    const data = JSON.parse(localStorage.getItem(PROFILE_KEY) || "null");
+    profiles = Array.isArray(data) ? data.filter((p) => p && p.id) : [];
+  } catch (e) { profiles = []; }
+}
+
+function writeProfiles() {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles)); }
+  catch (e) { /* storage unavailable — ignore */ }
+}
+
+function saveCurrentProfile() {
+  const suggestion = `Profile ${profiles.length + 1}`;
+  const name = (window.prompt("Name this profile:", suggestion) || "").trim();
+  if (!name) return;
+  profiles.push({
+    id: "p" + Date.now().toString(36),
+    name,
+    created: Date.now(),
+    connections: serializeConnections(),
+    gestures: serializeGestures(),
+    sensitivity: +els.sens.value,
+  });
+  writeProfiles();
+  renderProfiles();
+  setView("profiles", true);
+  logEvent(`<b>PROFILE</b> saved “${name}”`, "note");
+}
+
+function applyProfile(id) {
+  const profile = profiles.find((p) => p.id === id);
+  if (!profile) return;
+  closeEditor();
+  if (editingGesture) closeGestureEditor();
+
+  // Clear the current patch (removes cables) and swap the moves wholesale.
+  for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  for (const g of gestures.slice()) unregisterGestureParam(g.id);
+  gestures = (Array.isArray(profile.gestures) ? profile.gestures : [])
+    .map(gestureFromData).filter(Boolean);
+  for (const g of gestures) registerGestureParam(g);
+  persistGestures();
+  rebuildGraph();                 // recreate source nodes for the profile's moves
+
+  // Now that every source exists, apply the saved connections.
+  const conns = profile.connections || {};
+  audio.chimesOn = false;
+  for (const instKey in connections) {
+    const c = conns[instKey];
+    if (c && PARAMS[c.source]) {
+      connections[instKey] = mkConn(
+        c.source,
+        typeof c.atten === "number" ? clamp1(c.atten) : 1,
+        typeof c.thresh === "number" ? clamp1(c.thresh) : 0
+      );
+      if (instKey === "chimes") audio.chimesOn = true;
+    }
+  }
+  if (typeof profile.sensitivity === "number") {
+    els.sens.value = Math.max(0, Math.min(100, profile.sensitivity));
+    applySensitivity(+els.sens.value);
+  }
+  refreshConnectionStyles();
+  renderGestures();
+  saveState();
+  logEvent(`<b>PROFILE</b> loaded “${profile.name}”`, "note");
+}
+
+function deleteProfile(id) {
+  profiles = profiles.filter((p) => p.id !== id);
+  writeProfiles();
+  renderProfiles();
+}
+
+function renderProfiles() {
+  const box = els.profileList;
+  if (!box) return;
+  box.innerHTML = "";
+  if (!profiles.length) {
+    const empty = document.createElement("div");
+    empty.className = "profile-empty";
+    empty.textContent = "No saved profiles yet. Build a patch, then save it.";
+    box.appendChild(empty);
+    return;
+  }
+  for (const p of profiles) {
+    const nSounds = Object.values(p.connections || {}).filter(Boolean).length;
+    const nMoves = Array.isArray(p.gestures) ? p.gestures.length : 0;
+    const row = document.createElement("div");
+    row.className = "profile";
+    row.innerHTML =
+      `<div class="profile-main">` +
+        `<div class="profile-name"></div>` +
+        `<div class="profile-meta">${nSounds} sound${nSounds === 1 ? "" : "s"} · ${nMoves} move${nMoves === 1 ? "" : "s"}</div>` +
+      `</div>` +
+      `<button class="profile-load" data-load="${p.id}">Load</button>` +
+      `<button class="profile-del" data-del="${p.id}" title="Delete profile">×</button>`;
+    row.querySelector(".profile-name").textContent = p.name;
+    box.appendChild(row);
+  }
 }
 
 // ---- Per-parameter sparklines (inline history next to input nodes) ------
@@ -1556,9 +1686,12 @@ async function init() {
   const saved = loadState();
   applySavedState(saved);
 
+  loadProfiles();
+
   buildGraph();
   wireGraphEvents();
   renderGestures();
+  renderProfiles();
   audio.chimesOn = !!connections.chimes;
   initViews();
   if (saved && saved.views) {
@@ -1572,6 +1705,17 @@ async function init() {
   els.soundToggle.addEventListener("click", toggleSound);
   els.randomPatch.addEventListener("click", randomizePatch);
   els.clearPatch.addEventListener("click", clearPatch);
+  els.saveProfile.addEventListener("click", saveCurrentProfile);
+  els.saveProfilePanel.addEventListener("click", saveCurrentProfile);
+  els.profileList.addEventListener("click", (e) => {
+    const load = e.target.closest(".profile-load");
+    if (load) { applyProfile(load.dataset.load); return; }
+    const del = e.target.closest(".profile-del");
+    if (del) {
+      const p = profiles.find((x) => x.id === del.dataset.del);
+      if (p && window.confirm(`Delete profile “${p.name}”?`)) deleteProfile(del.dataset.del);
+    }
+  });
   els.recSession.addEventListener("click", toggleSessionRec);
   els.recMove.addEventListener("click", toggleRecordMove);
   els.importMove.addEventListener("click", () => els.importFile.click());
