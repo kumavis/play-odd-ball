@@ -17,6 +17,7 @@ const els = {
   lastNoteSub: document.getElementById("lastNoteSub"),
   hint: document.getElementById("hint"),
   soundToggle: document.getElementById("soundToggle"),
+  btBall: document.getElementById("btBall"),
   randomPatch: document.getElementById("randomPatch"),
   clearPatch: document.getElementById("clearPatch"),
   saveProfile: document.getElementById("saveProfile"),
@@ -80,7 +81,9 @@ const els = {
 };
 
 let midi = null;
-let activeInputs = [];   // every MIDIInput currently feeding the app
+let activeInputs = [];      // every input currently feeding the app (Web MIDI + BLE)
+let selectedWebInputs = []; // the current Web MIDI port selection (subset of activeInputs)
+const bleInputs = [];       // ODD Balls paired directly over Web Bluetooth
 let msgCount = 0;
 
 const audio = new AudioEngine();
@@ -1952,20 +1955,28 @@ function aggregateCc(ctrl) {
 
 const isOdd = (input) => /odd/i.test(input.name);
 
-// Bind onmidimessage to a list of inputs (and detach from all others) so any
-// number of controllers can drive the app at once.
+// Bind onmidimessage to a list of Web MIDI inputs (and detach from all others)
+// so any number of controllers can drive the app at once. BLE-paired balls feed
+// the app directly (see connectBluetoothBall) and are merged in by syncActiveInputs.
 function bindInputs(inputs) {
-  for (const inp of midi.inputs.values()) inp.onmidimessage = null;
-  activeInputs = inputs;
+  if (midi) for (const inp of midi.inputs.values()) inp.onmidimessage = null;
+  selectedWebInputs = inputs;
   for (const inp of inputs) inp.onmidimessage = onMidiMessage;
+  syncActiveInputs();
+  if (inputs.length) logEvent(`listening on <b>${inputs.map((i) => i.name).join(", ")}</b>`);
+}
+
+// Recompute the combined active-input list (Web MIDI selection + BLE balls) and
+// refresh status. Called whenever either source changes so the two stay merged.
+function syncActiveInputs() {
+  activeInputs = [...selectedWebInputs, ...bleInputs];
   // Drop stale per-device state so a removed controller stops contributing.
   for (const k in deviceCc) delete deviceCc[k];
   rollAccum = 0;
   featAccum = 0;
-  if (inputs.length === 0) { setStatus(false, "disconnected"); return; }
-  setStatus(true, inputs.length > 1 ? `connected · ${inputs.length}` : "connected");
+  if (activeInputs.length === 0) { setStatus(false, "disconnected"); return; }
+  setStatus(true, activeInputs.length > 1 ? `connected · ${activeInputs.length}` : "connected");
   els.hint.classList.add("hide");
-  logEvent(`listening on <b>${inputs.map((i) => i.name).join(", ")}</b>`);
 }
 
 // Resolve a dropdown value ("all-odd" / "all" / a specific port id) to inputs.
@@ -1987,8 +1998,9 @@ function refreshPorts() {
     opt.textContent = "No MIDI inputs found";
     opt.value = "";
     els.portSelect.appendChild(opt);
-    setStatus(false, "no devices");
-    activeInputs = [];
+    // Keep any Bluetooth-paired ball active; status reflects the combined total.
+    selectedWebInputs = [];
+    syncActiveInputs();
     return;
   }
   const oddInputs = inputs.filter(isOdd);
@@ -2008,6 +2020,98 @@ function refreshPorts() {
     : (oddInputs.length ? "all-odd" : inputs[0].id);
   els.portSelect.value = target;
   applySelection(target);
+}
+
+// ---- Bluetooth (BLE-MIDI) direct pairing -------------------------------------
+// The ODD Ball is a BLE-MIDI controller. On macOS it normally has to be paired
+// through Audio MIDI Setup before Web MIDI can see it. Web Bluetooth lets us skip
+// that: connect straight to the standard BLE-MIDI GATT service and decode the
+// packets ourselves, so a ball can be added from this page with one click.
+const BLE_MIDI_SERVICE = "03b80e5a-ede8-4b33-a751-6ce34ec4c700";
+const BLE_MIDI_CHAR = "7772e5db-3868-4112-a1a9-f2669d106bf3";
+
+// Decode a BLE-MIDI packet into MIDI messages. The packet is a header byte, then
+// one or more (timestamp byte + MIDI message) events; both header and timestamp
+// bytes have bit 7 set, and running status may omit the status byte. See the
+// BLE-MIDI spec (midi.org). We only need channel-voice + realtime messages here.
+function decodeBleMidi(bytes) {
+  const msgs = [];
+  if (bytes.length < 3) return msgs;  // header + timestamp + at least one byte
+  let status = 0;
+  let i = 1;                          // byte 0 is the packet header
+  while (i < bytes.length) {
+    // A timestamp-low byte (bit 7 set) precedes each event; skip it if present.
+    if (bytes[i] & 0x80) i++;
+    if (i >= bytes.length) break;
+    // System realtime (0xF8–0xFF): a lone status byte with no data.
+    if (bytes[i] >= 0xf8) { msgs.push([bytes[i++]]); continue; }
+    // Status byte (bit 7 set) starts a new message; otherwise running status.
+    if (bytes[i] & 0x80) { status = bytes[i]; i++; }
+    if (!status || i >= bytes.length) break;
+    const type = status & 0xf0;
+    if (type === 0xc0 || type === 0xd0) {          // program change / channel pressure
+      msgs.push([status, bytes[i++]]);
+    } else {                                         // note, CC, pitch bend, …
+      if (i + 1 >= bytes.length) break;
+      msgs.push([status, bytes[i], bytes[i + 1]]);
+      i += 2;
+    }
+  }
+  return msgs;
+}
+
+function removeBleInput(id) {
+  const idx = bleInputs.findIndex((p) => p.id === id);
+  if (idx === -1) return;
+  const [port] = bleInputs.splice(idx, 1);
+  delete deviceCc[id];
+  syncActiveInputs();
+  logEvent(`Bluetooth ball <b>${port.name}</b> disconnected`);
+}
+
+async function connectBluetoothBall() {
+  if (!navigator.bluetooth) {
+    els.hint.classList.remove("hide");
+    els.hint.innerHTML = "<p><strong>Web Bluetooth unavailable.</strong> Open this page in Chrome or Edge over HTTPS (or localhost). On macOS you can still pair via Audio MIDI Setup and pick the port above.</p>";
+    return;
+  }
+  let device;
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      // Show BLE-MIDI devices, plus anything advertising as an ODD Ball (some
+      // balls don't list the MIDI service UUID in their advertisement packet).
+      filters: [{ services: [BLE_MIDI_SERVICE] }, { namePrefix: "ODD" }],
+      optionalServices: [BLE_MIDI_SERVICE],
+    });
+  } catch (err) {
+    if (err && err.name === "NotFoundError") return;  // user dismissed the chooser
+    els.hint.classList.remove("hide");
+    els.hint.innerHTML = `<p><strong>Bluetooth pairing failed.</strong> ${err}</p>`;
+    return;
+  }
+  const id = `ble:${device.id}`;
+  if (bleInputs.some((p) => p.id === id)) { setStatus(true, "connected"); return; }
+  try {
+    setStatus(false, "connecting…");
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(BLE_MIDI_SERVICE);
+    const char = await service.getCharacteristic(BLE_MIDI_CHAR);
+    const port = { id, name: device.name || "ODD Ball (BLE)", device };
+    char.addEventListener("characteristicvaluechanged", (ev) => {
+      const bytes = new Uint8Array(ev.target.value.buffer);
+      for (const msg of decodeBleMidi(bytes)) onMidiMessage({ data: msg, target: port });
+    });
+    device.addEventListener("gattserverdisconnected", () => removeBleInput(id));
+    await char.startNotifications();
+    bleInputs.push(port);
+    syncActiveInputs();
+    logEvent(`Bluetooth ball <b>${port.name}</b> connected`, "note");
+  } catch (err) {
+    try { device.gatt && device.gatt.disconnect(); } catch (_) {}
+    els.hint.classList.remove("hide");
+    els.hint.innerHTML = `<p><strong>Bluetooth connect failed.</strong> ${err}</p>`;
+    syncActiveInputs();
+  }
 }
 
 async function init() {
@@ -2035,6 +2139,7 @@ async function init() {
   els.histToggle.addEventListener("click", () => setHistOpen(!histOpen()));
 
   els.soundToggle.addEventListener("click", toggleSound);
+  els.btBall.addEventListener("click", connectBluetoothBall);
   els.randomPatch.addEventListener("click", randomizePatch);
   els.clearPatch.addEventListener("click", clearPatch);
   els.saveProfile.addEventListener("click", saveCurrentProfile);
@@ -2165,7 +2270,7 @@ async function init() {
 
   if (!navigator.requestMIDIAccess) {
     setStatus(false, "no Web MIDI");
-    els.hint.innerHTML = "<p><strong>This browser has no Web MIDI.</strong> Open this page in Chrome or Edge.</p>";
+    els.hint.innerHTML = "<p><strong>This browser has no Web MIDI.</strong> Open this page in Chrome or Edge. You can still use <code>🔵 Connect ball</code> to pair over Bluetooth.</p>";
   } else {
     try {
       midi = await navigator.requestMIDIAccess({ sysex: false });
