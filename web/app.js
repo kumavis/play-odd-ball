@@ -98,6 +98,10 @@ const ROLL_CHANNELS = new Set([4, 5, 6]);
 // them (average) into the shared `cc` used by the parameters.
 const deviceCc = {};
 let rollAccum = 0;
+// Orientation/spin path length (normalized) accumulated from EVERY message, so
+// gesture activity & motion energy reflect fast motion instead of aliasing at
+// the animation frame rate. Drained each frame in updateGestureActivity.
+let featAccum = 0;
 let rollRate = 0;      // smoothed CC-units/sec on channels 4-6
 let rollSpeed = 0;     // final gated 0..1 intensity sent to the synth
 let rollRaw = 0;       // ungated normalized rate (0..1) for the meter
@@ -146,6 +150,7 @@ const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
 // the move as finished. Delta-based activity stays low while the ball is held
 // still at any angle and spikes on the actual throw / snap / catch.
 const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // orientation + spin CCs
+const GEST_CHANNELS = new Set(GEST_DIMS); // fast lookup for the message handler
 // The PARAMS keys those dims are stored under in a recorded session file, in
 // the same order — used to rebuild feature frames when importing a session.
 const GEST_DIM_KEYS = ["tilt_x", "tilt_y", "tilt_z", "cc3", "cc4", "cc5", "cc6"];
@@ -231,8 +236,12 @@ const featureVec = () => GEST_DIMS.map((c) => (cc[c] ?? 0) / 127);
 // Track how fast the orientation is changing (framerate-independent) and keep a
 // short history buffer so a move's wind-up can be folded in as pre-roll.
 function updateGestureActivity(now, dt, feat) {
-  let speed = 0;
-  if (prevFeat) { let s = 0; for (let i = 0; i < feat.length; i++) s += Math.abs(feat[i] - prevFeat[i]); speed = s / dt; }
+  // Speed is the orientation path length per second gathered from every MIDI
+  // message this frame (drained here). For smooth motion this equals the old
+  // net-delta reading, so thresholds stay calibrated; for fast motion it keeps
+  // climbing instead of aliasing down once the ball outruns the frame rate.
+  const speed = featAccum / dt;
+  featAccum = 0;
   prevFeat = feat;
   const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
   gestActivity += (speed - gestActivity) * a;
@@ -1815,7 +1824,14 @@ function onMidiMessage(e) {
     }
     dev[d1] = d2;
     // Merge this controller across all bound devices for the shared value.
+    const prevAgg = cc[d1];
     cc[d1] = aggregateCc(d1);
+    // Sum the true per-message change of each gesture feature (path length),
+    // not just the net frame-to-frame difference, so quick wiggles/spins keep
+    // reading faster instead of plateauing once motion outruns 60 fps sampling.
+    if (GEST_CHANNELS.has(d1) && prevAgg !== undefined) {
+      featAccum += Math.abs(cc[d1] - prevAgg) / 127;
+    }
     const row = ensureCcRow(d1);
     row.fill.style.width = `${(cc[d1] / 127) * 100}%`;
     row.val.textContent = Math.round(cc[d1]);
@@ -1845,6 +1861,7 @@ function bindInputs(inputs) {
   // Drop stale per-device state so a removed controller stops contributing.
   for (const k in deviceCc) delete deviceCc[k];
   rollAccum = 0;
+  featAccum = 0;
   if (inputs.length === 0) { setStatus(false, "disconnected"); return; }
   setStatus(true, inputs.length > 1 ? `connected · ${inputs.length}` : "connected");
   els.hint.classList.add("hide");
