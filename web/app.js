@@ -239,7 +239,10 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const graph = {
   srcPorts: {}, srcNodes: {}, srcVals: {}, sparkCanvas: {}, sparkCtx: {},
   instPorts: {}, instNodes: {},
-  cables: {}, temp: null, drag: null,
+  cables: {}, temp: null,
+  link: null,        // { fromType, fromKey } while a connection is in progress
+  mode: null,        // "drag" (holding) or "armed" (click-to-connect)
+  fromPort: null, downX: 0, downY: 0,
 };
 
 const SRC_W = 210, INST_W = 132, SRC_H = 46, INST_H = 34, GPAD = 16;
@@ -294,6 +297,13 @@ function buildGraph() {
   window.addEventListener("resize", layoutGraph);
   el.addEventListener("pointerdown", onGraphPointerDown);
   svg.addEventListener("pointerdown", onGraphPointerDown); // clicks on cables
+  // A click anywhere off the graph (or Escape) cancels an armed connection.
+  window.addEventListener("pointerdown", (e) => {
+    if (graph.mode === "armed" && !e.target.closest("#graph")) clearLink();
+  });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && (graph.link || graph.mode)) clearLink();
+  });
   refreshConnectionStyles();
 }
 
@@ -362,23 +372,59 @@ function refreshConnectionStyles() {
   }
 }
 
+// Connecting works two ways, no long drag required:
+//   • click a port, then click a port on the other side, OR
+//   • press-drag-release from one port onto another (classic drag).
+// A short press-and-release on a port "arms" the link: a cable then trails the
+// cursor until the next click on an opposite port completes it.
 function onGraphPointerDown(e) {
   const port = e.target.closest(".gport");
-  if (port) {
-    e.preventDefault();
-    graph.drag = { fromType: port.dataset.port, fromKey: port.dataset.key };
-    graph.temp = document.createElementNS(SVGNS, "path");
-    graph.temp.setAttribute("class", "cable-temp");
-    graph.temp.setAttribute("stroke", "#00e5ff");
-    graph.temp.setAttribute("stroke-width", "2.5");
-    document.getElementById("graphSvg").appendChild(graph.temp);
-    window.addEventListener("pointermove", onGraphPointerMove);
-    window.addEventListener("pointerup", onGraphPointerUp);
+  // If a link is armed, this click lands it (or cancels).
+  if (graph.link && graph.mode === "armed") {
+    if (port && port.dataset.port !== graph.link.fromType) completeLink(port);
+    else clearLink();
     return;
   }
+  if (port) { startLink(port, e); return; }
   // Click on a cable hit-area opens the connection editor for that link.
   const hit = e.target.closest(".cable-hit");
   if (hit) { openEditor(hit.dataset.inst, e.clientX, e.clientY); return; }
+}
+
+function startLink(port, e) {
+  e.preventDefault();
+  graph.link = { fromType: port.dataset.port, fromKey: port.dataset.key };
+  graph.mode = "drag";
+  graph.downX = e.clientX; graph.downY = e.clientY;
+  graph.fromPort = port; port.classList.add("is-source");
+  graph.temp = document.createElementNS(SVGNS, "path");
+  graph.temp.setAttribute("class", "cable-temp");
+  graph.temp.setAttribute("stroke",
+    graph.link.fromType === "out" ? (PARAMS[graph.link.fromKey]?.color || "#00e5ff") : "#00e5ff");
+  graph.temp.setAttribute("stroke-width", "2.5");
+  document.getElementById("graphSvg").appendChild(graph.temp);
+  window.addEventListener("pointermove", onGraphPointerMove);
+  window.addEventListener("pointerup", onLinkPointerUp);
+  onGraphPointerMove(e); // draw the initial stub immediately
+}
+
+function completeLink(p) {
+  const d = graph.link;
+  if (d) {
+    const srcKey = d.fromType === "out" ? d.fromKey : p.dataset.key;
+    const instKey = d.fromType === "out" ? p.dataset.key : d.fromKey;
+    if (PARAMS[srcKey] && connections[instKey] !== undefined) connect(srcKey, instKey);
+  }
+  clearLink();
+}
+
+function clearLink() {
+  window.removeEventListener("pointermove", onGraphPointerMove);
+  window.removeEventListener("pointerup", onLinkPointerUp);
+  document.querySelectorAll(".gport.is-target").forEach((n) => n.classList.remove("is-target"));
+  if (graph.fromPort) { graph.fromPort.classList.remove("is-source"); graph.fromPort = null; }
+  if (graph.temp) { graph.temp.remove(); graph.temp = null; }
+  graph.link = null; graph.mode = null;
 }
 
 function localPoint(e) {
@@ -387,32 +433,29 @@ function localPoint(e) {
 }
 
 function onGraphPointerMove(e) {
-  if (!graph.drag) return;
-  const from = graph.drag.fromType === "out"
-    ? portCenter(graph.srcPorts[graph.drag.fromKey])
-    : portCenter(graph.instPorts[graph.drag.fromKey]);
+  if (!graph.link || !graph.temp) return;
+  const from = graph.link.fromType === "out"
+    ? portCenter(graph.srcPorts[graph.link.fromKey])
+    : portCenter(graph.instPorts[graph.link.fromKey]);
   graph.temp.setAttribute("d", cablePath(from, localPoint(e)));
 
   const over = document.elementFromPoint(e.clientX, e.clientY);
   const p = over && over.closest(".gport");
   document.querySelectorAll(".gport.is-target").forEach((n) => n.classList.remove("is-target"));
-  if (p && p.dataset.port !== graph.drag.fromType) p.classList.add("is-target");
+  if (p && p.dataset.port !== graph.link.fromType) p.classList.add("is-target");
 }
 
-function onGraphPointerUp(e) {
-  window.removeEventListener("pointermove", onGraphPointerMove);
-  window.removeEventListener("pointerup", onGraphPointerUp);
-  document.querySelectorAll(".gport.is-target").forEach((n) => n.classList.remove("is-target"));
-  if (graph.temp) { graph.temp.remove(); graph.temp = null; }
-  const d = graph.drag; graph.drag = null;
-  if (!d) return;
-
+function onLinkPointerUp(e) {
+  window.removeEventListener("pointerup", onLinkPointerUp);
+  if (!graph.link) return;
   const over = document.elementFromPoint(e.clientX, e.clientY);
   const p = over && over.closest(".gport");
-  if (!p || p.dataset.port === d.fromType) return; // dropped on nothing / same side
-  const srcKey = d.fromType === "out" ? d.fromKey : p.dataset.key;
-  const instKey = d.fromType === "out" ? p.dataset.key : d.fromKey;
-  if (PARAMS[srcKey] && connections[instKey] !== undefined) connect(srcKey, instKey);
+  if (p && p.dataset.port !== graph.link.fromType) { completeLink(p); return; }
+  // Released without landing on a target: if it was basically a click (no real
+  // drag), keep the link armed so the next click on a port finishes it.
+  const moved = Math.hypot(e.clientX - graph.downX, e.clientY - graph.downY);
+  if (moved < 6) graph.mode = "armed"; // keep temp + pointermove trailing the cursor
+  else clearLink();
 }
 
 // ---- Connection editor (threshold + attenuation per link) ---------------
