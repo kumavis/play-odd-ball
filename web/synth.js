@@ -30,10 +30,26 @@ class AudioEngine {
   static get INSTRUMENTS() {
     return [
       { key: "bass", label: "Alien bass" },
+      { key: "thunder", label: "Thunderstorm" },
+      { key: "rain", label: "Rainfall" },
       { key: "theremin", label: "Theremin" },
+      { key: "choir", label: "Ghost choir" },
       { key: "pad", label: "Warm pad" },
+      { key: "organ", label: "Drone organ" },
+      { key: "bells", label: "Shimmer bells" },
       { key: "wind", label: "Noise wind" },
       { key: "pluck", label: "Pluck arp" },
+      { key: "acid", label: "Acid 303" },
+      { key: "wobble", label: "Wobble bass" },
+      { key: "growl", label: "Monster growl" },
+      { key: "siren", label: "Siren" },
+      { key: "laser", label: "Laser zaps" },
+      { key: "bubbles", label: "Water bubbles" },
+      { key: "whale", label: "Whale song" },
+      { key: "crickets", label: "Crickets" },
+      { key: "ufo", label: "UFO warble" },
+      { key: "gamelan", label: "Gamelan" },
+      { key: "geiger", label: "Geiger clicks" },
     ];
   }
 
@@ -66,10 +82,26 @@ class AudioEngine {
     this.master.connect(ctx.destination);
 
     this.voices.bass = this._buildBass();
+    this.voices.thunder = this._buildThunder();
+    this.voices.rain = this._buildRain();
     this.voices.theremin = this._buildTheremin();
+    this.voices.choir = this._buildChoir();
     this.voices.pad = this._buildPad();
+    this.voices.organ = this._buildOrgan();
+    this.voices.bells = this._buildBells();
     this.voices.wind = this._buildWind();
     this.voices.pluck = this._buildPluck();
+    this.voices.acid = this._buildAcid();
+    this.voices.wobble = this._buildWobble();
+    this.voices.growl = this._buildGrowl();
+    this.voices.siren = this._buildSiren();
+    this.voices.laser = this._buildLaser();
+    this.voices.bubbles = this._buildBubbles();
+    this.voices.whale = this._buildWhale();
+    this.voices.crickets = this._buildCrickets();
+    this.voices.ufo = this._buildUfo();
+    this.voices.gamelan = this._buildGamelan();
+    this.voices.geiger = this._buildGeiger();
 
     await ctx.resume();
     this.enabled = true;
@@ -242,6 +274,442 @@ class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25);
     o.start(t); o.stop(t + 0.3);
     setTimeout(() => g.disconnect(), 400);
+  }
+
+  // ---- Shared helpers for the extra voices ------------------------------
+
+  _noiseBuffer(seconds) {
+    const rate = this.ctx.sampleRate;
+    const len = Math.max(1, Math.floor(rate * seconds));
+    const buf = this.ctx.createBuffer(1, len, rate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+
+  _loopNoise(dest) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noiseBuffer(2);
+    src.loop = true;
+    src.connect(dest);
+    src.start(this.ctx.currentTime);
+    return src;
+  }
+
+  // Soft clipping curve for distortion voices.
+  _shaper(amount) {
+    const n = 1024, curve = new Float32Array(n), k = amount;
+    for (let i = 0; i < n; i++) {
+      const x = (i * 2) / n - 1;
+      curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
+    }
+    return curve;
+  }
+
+  // FM bell "ping": a bright metallic tone with an exponential decay.
+  _ping(hz, gain, dest, decay = 1.4, ratio = 2.01) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const car = ctx.createOscillator(); car.type = "sine"; car.frequency.value = hz;
+    const mod = ctx.createOscillator(); mod.type = "sine"; mod.frequency.value = hz * ratio;
+    const modGain = ctx.createGain(); modGain.gain.value = hz * 3;
+    mod.connect(modGain).connect(car.frequency);
+    const g = ctx.createGain(); g.gain.value = 0;
+    car.connect(g).connect(dest);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    car.start(t); mod.start(t); car.stop(t + decay + 0.1); mod.stop(t + decay + 0.1);
+    setTimeout(() => g.disconnect(), (decay + 0.3) * 1000);
+  }
+
+  // Random-trigger scheduler shared by the sprinkly/percussive voices. Returns
+  // true (and advances voice.last) when it's time to fire an event.
+  _due(voice, v, minMs, maxMs) {
+    const now = performance.now();
+    if (v <= 0.02) { voice.last = now; return false; }
+    const base = maxMs - v * (maxMs - minMs);
+    const interval = base * (0.5 + Math.random());
+    if (now - voice.last >= interval) { voice.last = now; return true; }
+    return false;
+  }
+
+  // ---- Thunderstorm -----------------------------------------------------
+  // A rain bed that thickens with value, plus randomly cracking thunder that
+  // gets more frequent and louder the higher the value.
+  _buildThunder() {
+    const ctx = this.ctx;
+    const out = this._out(); out.gain.value = 1;
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 500;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3000;
+    const rain = ctx.createGain(); rain.gain.value = 0;
+    this._loopNoise(hp); hp.connect(lp).connect(rain).connect(out);
+
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => {
+      const target = v > 0.01 ? 0.04 + v * 0.28 : 0;
+      voice.level += (target - voice.level) * 0.08;
+      rain.gain.value = voice.level;
+      lp.frequency.value = 1200 + v * 4500;
+      const now = performance.now();
+      if (v > 0.04 && now - voice.last > 450) {
+        if (Math.random() < 0.0015 + v * 0.02) { voice.last = now; this._thunderBoom(out, 0.35 + v * 0.6); }
+      }
+    };
+    return voice;
+  }
+
+  _thunderBoom(dest, level) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = this._noiseBuffer(2.6);
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 1.4;
+    lp.frequency.setValueAtTime(700, t);
+    lp.frequency.exponentialRampToValueAtTime(80, t + 2.2);
+    const g = ctx.createGain(); g.gain.value = 0;
+    src.connect(lp).connect(g).connect(dest);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(level * 0.4, t + 0.5);
+    g.gain.linearRampToValueAtTime(level * 0.85, t + 0.85); // second rumble swell
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 2.5);
+    src.start(t); src.stop(t + 2.6);
+    setTimeout(() => g.disconnect(), 2800);
+  }
+
+  // ---- Rainfall (gentle) ------------------------------------------------
+  _buildRain() {
+    const ctx = this.ctx;
+    const out = this._out(); out.gain.value = 1;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 3200; bp.Q.value = 0.6;
+    const hiss = ctx.createGain(); hiss.gain.value = 0;
+    this._loopNoise(bp); bp.connect(hiss).connect(out);
+
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => {
+      const target = v > 0.01 ? v * 0.18 : 0;
+      voice.level += (target - voice.level) * 0.1;
+      hiss.gain.value = voice.level;
+      bp.frequency.value = 2200 + v * 3500;
+      if (this._due(voice, v, 40, 220)) {                 // droplet pings
+        const hz = 1400 + Math.random() * 2600;
+        this._ping(hz, 0.03 + v * 0.05, out, 0.18, 3.1);
+      }
+    };
+    return voice;
+  }
+
+  // ---- Ghost choir (vowel formants) -------------------------------------
+  _buildChoir() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const src = ctx.createGain(); src.gain.value = 0.4;
+    for (const [midi, det] of [[50, -7], [50, 7], [57, 0]]) {
+      const o = ctx.createOscillator(); o.type = "sawtooth";
+      o.frequency.value = mtof(midi); o.detune.value = det; o.connect(src); o.start(t);
+    }
+    const vib = ctx.createOscillator(); vib.type = "sine"; vib.frequency.value = 4.5;
+    const vibDepth = ctx.createGain(); vibDepth.gain.value = 5;
+    vib.connect(vibDepth); vib.start(t);
+    // Three vowel formant bandpasses summed.
+    for (const [f, q, g] of [[750, 8, 1], [1150, 9, 0.7], [2900, 11, 0.4]]) {
+      const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = f; bp.Q.value = q;
+      const fg = ctx.createGain(); fg.gain.value = g;
+      src.connect(bp).connect(fg).connect(out);
+    }
+    const voice = { out, level: 0 };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.03 + v * 0.22 : 0, 0.05, 0.03);
+      vibDepth.gain.value = 3 + v * 9;
+    };
+    return voice;
+  }
+
+  // ---- Drone organ (additive drawbars) ----------------------------------
+  _buildOrgan() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const mix = ctx.createGain(); mix.gain.value = 0.18;
+    const base = mtof(45);
+    for (const [mult, g] of [[1, 1], [2, 0.6], [3, 0.5], [4, 0.3], [6, 0.25]]) {
+      const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = base * mult;
+      const og = ctx.createGain(); og.gain.value = g;
+      o.connect(og).connect(mix); o.start(t);
+    }
+    mix.connect(out);
+    const voice = { out, level: 0 };
+    voice.set = (v) => this._glide(voice, v > 0.01 ? 0.03 + v * 0.22 : 0, 0.12, 0.06);
+    return voice;
+  }
+
+  // ---- Shimmer bells (random FM bells) ----------------------------------
+  _buildBells() {
+    const out = this._out(); out.gain.value = 1;
+    const scale = [0, 2, 4, 7, 9, 12, 16];
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => {
+      if (this._due(voice, v, 90, 700)) {
+        const deg = scale[Math.floor(Math.random() * scale.length)] + 12 * Math.floor(Math.random() * 2);
+        this._ping(mtof(72 + deg), 0.06 + v * 0.12, out, 1.2 + v * 1.8, 1.41);
+      }
+    };
+    return voice;
+  }
+
+  // ---- Acid 303 (resonant saw arp with filter env) ----------------------
+  _buildAcid() {
+    const ctx = this.ctx;
+    const out = this._out(); out.gain.value = 1;
+    const scale = [0, 3, 5, 6, 7, 10];
+    const voice = { out, level: 0, last: 0, phase: 0 };
+    voice.set = (v) => {
+      const now = performance.now();
+      if (v <= 0.02) { voice.last = now; return; }
+      const interval = 240 - v * 175;
+      if (now - voice.last >= interval) {
+        voice.last = now;
+        const deg = scale[voice.phase % scale.length] + 12 * (voice.phase % 3 === 0 ? 1 : 0);
+        voice.phase++;
+        this._acidNote(mtof(40 + deg), 0.18 + v * 0.22, out, v);
+      }
+    };
+    return voice;
+  }
+
+  _acidNote(hz, gain, dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = hz;
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 12 + v * 12;
+    lp.frequency.setValueAtTime(hz * 2, t);
+    lp.frequency.exponentialRampToValueAtTime(hz * (6 + v * 16), t + 0.04);
+    lp.frequency.exponentialRampToValueAtTime(hz * 1.5, t + 0.22);
+    const g = ctx.createGain(); g.gain.value = 0;
+    o.connect(lp).connect(g).connect(dest);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    o.start(t); o.stop(t + 0.3);
+    setTimeout(() => g.disconnect(), 400);
+  }
+
+  // ---- Wobble bass (LFO-swept resonant lowpass) -------------------------
+  _buildWobble() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 400; lp.Q.value = 12;
+    const mix = ctx.createGain(); mix.gain.value = 0.25;
+    for (const det of [-6, 6]) {
+      const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = mtof(31); o.detune.value = det;
+      o.connect(mix); o.start(t);
+    }
+    const sub = ctx.createOscillator(); sub.type = "sine"; sub.frequency.value = mtof(31) / 2;
+    sub.connect(mix); sub.start(t);
+    const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = 3;
+    const lfoDepth = ctx.createGain(); lfoDepth.gain.value = 600;
+    lfo.connect(lfoDepth).connect(lp.frequency); lfo.start(t);
+    mix.connect(lp).connect(out);
+    const voice = { out, level: 0 };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.05 + v * 0.5 : 0, 0.3, 0.08);
+      lfo.frequency.value = 1 + v * 11;          // wobble speed
+      lp.frequency.value = 250 + v * 500;
+      lfoDepth.gain.value = 300 + v * 900;
+    };
+    return voice;
+  }
+
+  // ---- Monster growl (distorted formant) --------------------------------
+  _buildGrowl() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = mtof(28);
+    const growlLfo = ctx.createOscillator(); growlLfo.type = "square"; growlLfo.frequency.value = 30;
+    const growlDepth = ctx.createGain(); growlDepth.gain.value = 20;
+    growlLfo.connect(growlDepth).connect(o.detune); growlLfo.start(t);
+    const shaper = ctx.createWaveShaper(); shaper.curve = this._shaper(18);
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 500; bp.Q.value = 4;
+    o.connect(shaper).connect(bp).connect(out); o.start(t);
+    const voice = { out, level: 0 };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.03 + v * 0.3 : 0, 0.25, 0.1);
+      growlLfo.frequency.value = 18 + v * 60;
+      bp.frequency.value = 300 + v * 1400;
+    };
+    return voice;
+  }
+
+  // ---- Siren ------------------------------------------------------------
+  _buildSiren() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = 600;
+    const lfo = ctx.createOscillator(); lfo.type = "triangle"; lfo.frequency.value = 0.4;
+    const lfoDepth = ctx.createGain(); lfoDepth.gain.value = 300;
+    lfo.connect(lfoDepth).connect(o.frequency); lfo.start(t);
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2500;
+    o.connect(lp).connect(out); o.start(t);
+    const voice = { out, level: 0 };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.02 + v * 0.16 : 0, 0.2, 0.1);
+      lfo.frequency.value = 0.2 + v * 4;
+      o.frequency.value = 500 + v * 500;
+    };
+    return voice;
+  }
+
+  // ---- Laser zaps (random descending blips) -----------------------------
+  _buildLaser() {
+    const out = this._out(); out.gain.value = 1;
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => { if (this._due(voice, v, 60, 500)) this._zap(out, v); };
+    return voice;
+  }
+
+  _zap(dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = "square";
+    const top = 1200 + Math.random() * 2600;
+    o.frequency.setValueAtTime(top, t);
+    o.frequency.exponentialRampToValueAtTime(120, t + 0.18);
+    const g = ctx.createGain(); g.gain.value = 0;
+    o.connect(g).connect(dest);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.08 + v * 0.14, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+    o.start(t); o.stop(t + 0.22);
+    setTimeout(() => g.disconnect(), 300);
+  }
+
+  // ---- Water bubbles (random pitched bloops) ----------------------------
+  _buildBubbles() {
+    const out = this._out(); out.gain.value = 1;
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => { if (this._due(voice, v, 70, 500)) this._bloop(out, v); };
+    return voice;
+  }
+
+  _bloop(dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = "sine";
+    const base = 200 + Math.random() * 700;
+    o.frequency.setValueAtTime(base, t);
+    o.frequency.exponentialRampToValueAtTime(base * (2 + Math.random() * 2), t + 0.09);
+    const g = ctx.createGain(); g.gain.value = 0;
+    o.connect(g).connect(dest);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.12 + v * 0.15, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+    o.start(t); o.stop(t + 0.16);
+    setTimeout(() => g.disconnect(), 250);
+  }
+
+  // ---- Whale song (slow gliding low sine + harmonic) --------------------
+  _buildWhale() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 120;
+    const h = ctx.createOscillator(); h.type = "sine"; h.frequency.value = 240;
+    const hg = ctx.createGain(); hg.gain.value = 0.35;
+    const vib = ctx.createOscillator(); vib.type = "sine"; vib.frequency.value = 1.2;
+    const vibDepth = ctx.createGain(); vibDepth.gain.value = 8;
+    vib.connect(vibDepth); vibDepth.connect(o.detune); vibDepth.connect(h.detune); vib.start(t);
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900;
+    o.connect(lp); h.connect(hg).connect(lp); lp.connect(out); o.start(t); h.start(t);
+    const voice = { out, level: 0 };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.05 + v * 0.28 : 0, 0.04, 0.03); // slow, mournful
+      const hz = 80 * Math.pow(2, v * 1.6); // ~80Hz -> ~240Hz
+      o.frequency.value = hz; h.frequency.value = hz * 2;
+      vib.frequency.value = 0.6 + v * 2;
+    };
+    return voice;
+  }
+
+  // ---- Crickets (random high chirp bursts) ------------------------------
+  _buildCrickets() {
+    const out = this._out(); out.gain.value = 1;
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => { if (this._due(voice, v, 120, 900)) this._chirp(out, v); };
+    return voice;
+  }
+
+  _chirp(dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = "square"; o.frequency.value = 4200 + Math.random() * 1500;
+    const trem = ctx.createOscillator(); trem.type = "square"; trem.frequency.value = 45;
+    const tremG = ctx.createGain(); tremG.gain.value = 0.5;
+    const g = ctx.createGain(); g.gain.value = 0;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 5000; bp.Q.value = 6;
+    trem.connect(tremG).connect(g.gain); trem.start(t);
+    o.connect(bp).connect(g).connect(dest); o.start(t);
+    const dur = 0.12 + Math.random() * 0.14;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05 + v * 0.06, t + 0.02);
+    g.gain.setValueAtTime(0.05 + v * 0.06, t + dur - 0.02);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    o.stop(t + dur + 0.02); trem.stop(t + dur + 0.02);
+    setTimeout(() => g.disconnect(), (dur + 0.1) * 1000);
+  }
+
+  // ---- UFO warble (random FM sci-fi) ------------------------------------
+  _buildUfo() {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const out = this._out();
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = 500;
+    const fm = ctx.createOscillator(); fm.type = "sine"; fm.frequency.value = 7;
+    const fmDepth = ctx.createGain(); fmDepth.gain.value = 200;
+    fm.connect(fmDepth).connect(o.frequency); fm.start(t);
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;
+    o.connect(lp).connect(out); o.start(t);
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.02 + v * 0.16 : 0, 0.2, 0.1);
+      fm.frequency.value = 3 + v * 18;
+      fmDepth.gain.value = 80 + v * 500;
+      const now = performance.now();
+      if (now - voice.last > 900 + Math.random() * 1200) { // occasional pitch jumps
+        voice.last = now;
+        o.frequency.setTargetAtTime(300 + Math.random() * 900, this.ctx.currentTime, 0.08);
+      }
+    };
+    return voice;
+  }
+
+  // ---- Gamelan (inharmonic metallic arp) --------------------------------
+  _buildGamelan() {
+    const out = this._out(); out.gain.value = 1;
+    const scale = [0, 2, 5, 7, 9]; // slendro-ish
+    const voice = { out, level: 0, last: 0, phase: 0 };
+    voice.set = (v) => {
+      const now = performance.now();
+      if (v <= 0.02) { voice.last = now; return; }
+      const interval = 360 - v * 250;
+      if (now - voice.last >= interval) {
+        voice.last = now;
+        const deg = scale[voice.phase % scale.length] + 12 * (voice.phase % 2);
+        voice.phase++;
+        this._ping(mtof(60 + deg), 0.08 + v * 0.12, out, 0.9 + v * 1.2, 3.47); // inharmonic ratio
+      }
+    };
+    return voice;
+  }
+
+  // ---- Geiger clicks (random impulse ticks) -----------------------------
+  _buildGeiger() {
+    const out = this._out(); out.gain.value = 1;
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => { if (this._due(voice, v, 25, 700)) this._tick(out, v); };
+    return voice;
+  }
+
+  _tick(dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const src = ctx.createBufferSource(); src.buffer = this._noiseBuffer(0.02);
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2500;
+    const g = ctx.createGain(); g.gain.value = 0;
+    src.connect(hp).connect(g).connect(dest);
+    g.gain.setValueAtTime(0.12 + v * 0.18, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.03);
+    src.start(t); src.stop(t + 0.04);
+    setTimeout(() => g.disconnect(), 120);
   }
 
   _makeImpulse(seconds, decay) {

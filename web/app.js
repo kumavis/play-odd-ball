@@ -88,14 +88,11 @@ const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
 //   shaped = ((raw - thresh) / (1 - thresh))  (clamped, 0 below thresh) * atten
 const INSTRUMENTS = [...AudioEngine.INSTRUMENTS, { key: "chimes", label: "Chimes" }];
 const mkConn = (source, atten = 1, thresh = 0) => ({ source, atten, thresh });
-const connections = {
-  bass: mkConn("roll_speed"),
-  theremin: null,
-  pad: null,
-  wind: null,
-  pluck: null,
-  chimes: mkConn("tap"),
-};
+// Every instrument starts unpatched; a couple get sensible defaults.
+const connections = {};
+INSTRUMENTS.forEach((inst) => { connections[inst.key] = null; });
+connections.bass = mkConn("roll_speed");
+connections.chimes = mkConn("tap");
 
 function shape(conn) {
   if (!conn) return 0;
@@ -312,11 +309,13 @@ function layoutGraph() {
     n.style.top = `${GPAD + i * srcSlot + (srcSlot - SRC_H) / 2}px`;
   });
   const instSlot = (H - GPAD * 2) / INSTRUMENTS.length;
+  const ih = Math.max(18, Math.min(INST_H, instSlot - 4));
   INSTRUMENTS.forEach((inst, i) => {
     const n = graph.instNodes[inst.key];
     n.style.width = `${INST_W}px`;
+    n.style.height = `${ih}px`;
     n.style.left = `${W - INST_W - GPAD}px`;
-    n.style.top = `${GPAD + i * instSlot + (instSlot - INST_H) / 2}px`;
+    n.style.top = `${GPAD + i * instSlot + (instSlot - ih) / 2}px`;
   });
 }
 
