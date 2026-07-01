@@ -105,6 +105,68 @@ function shape(conn) {
   return clamp1(gated) * conn.atten;
 }
 
+// ---- Persistence: patch config + settings survive a reload ---------------
+const STORAGE_KEY = "oddball.patchbay.v1";
+let loading = true;        // suppress saves while restoring on startup
+let saveTimer = null;
+
+function serializeState() {
+  const views = {};
+  document.querySelectorAll(".side").forEach((s) => {
+    views[s.dataset.view] = !s.classList.contains("side--hidden");
+  });
+  return {
+    connections,
+    sensitivity: +els.sens.value,
+    sound: soundIntent,
+    views,
+  };
+}
+
+function saveState() {
+  if (loading) return;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+  } catch (e) { /* storage unavailable (private mode / quota) — ignore */ }
+}
+
+// Coalesce bursts of writes (e.g. dragging an editor slider) into one save.
+function saveStateSoon() {
+  if (loading) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveState, 200);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+// Apply a restored config over the defaults, validating each field so a stale
+// or corrupt entry can never break the graph.
+function applySavedState(saved) {
+  if (!saved) return;
+  if (saved.connections) {
+    for (const instKey in connections) {
+      const c = saved.connections[instKey];
+      if (c && PARAMS[c.source]) {
+        connections[instKey] = mkConn(
+          c.source,
+          typeof c.atten === "number" ? clamp1(c.atten) : 1,
+          typeof c.thresh === "number" ? clamp1(c.thresh) : 0
+        );
+      } else if (c === null) {
+        connections[instKey] = null;
+      }
+    }
+  }
+  if (typeof saved.sensitivity === "number") {
+    els.sens.value = Math.max(0, Math.min(100, saved.sensitivity));
+  }
+}
+
 // A single 0..100 "sensitivity" maps to the gate + scale: higher sensitivity
 // means a lower threshold and less motion needed to reach full intensity.
 function applySensitivity(pct) {
@@ -276,6 +338,7 @@ function connect(srcKey, instKey) {
   connections[instKey] = mkConn(srcKey, prev?.atten ?? 1, prev?.thresh ?? 0);
   if (instKey === "chimes") audio.chimesOn = true;
   refreshConnectionStyles();
+  saveStateSoon();
 }
 
 function disconnect(instKey) {
@@ -285,6 +348,7 @@ function disconnect(instKey) {
   if (c) { c.line.remove(); c.hit.remove(); delete graph.cables[instKey]; }
   if (editing === instKey) closeEditor();
   refreshConnectionStyles();
+  saveStateSoon();
 }
 
 function refreshConnectionStyles() {
@@ -541,6 +605,7 @@ async function toggleSound() {
     await audio.enable();
     setSoundButton(true);
   }
+  saveStateSoon();
 }
 
 // Default sound ON: reflect it in the UI and try to start immediately. Browser
@@ -572,6 +637,7 @@ function setView(view, on) {
   if (btn) btn.classList.toggle("is-active", on);
   const anyOn = [...document.querySelectorAll(".side")].some((s) => !s.classList.contains("side--hidden"));
   els.drawer.classList.toggle("is-empty", !anyOn);
+  saveStateSoon();
 }
 
 function initViews() {
@@ -657,20 +723,26 @@ function refreshPorts() {
 }
 
 async function init() {
+  const saved = loadState();
+  applySavedState(saved);
+
   buildGraph();
   audio.chimesOn = !!connections.chimes;
   initViews();
+  if (saved && saved.views) {
+    for (const v in saved.views) setView(v, !!saved.views[v]);
+  }
 
   els.soundToggle.addEventListener("click", toggleSound);
-  els.sens.addEventListener("input", (e) => applySensitivity(+e.target.value));
+  els.sens.addEventListener("input", (e) => { applySensitivity(+e.target.value); saveStateSoon(); });
   applySensitivity(+els.sens.value);
 
   // Connection editor wiring.
   els.ceThresh.addEventListener("input", () => {
-    if (editing && connections[editing]) { connections[editing].thresh = +els.ceThresh.value / 100; updateEditorLabels(); }
+    if (editing && connections[editing]) { connections[editing].thresh = +els.ceThresh.value / 100; updateEditorLabels(); saveStateSoon(); }
   });
   els.ceAtten.addEventListener("input", () => {
-    if (editing && connections[editing]) { connections[editing].atten = +els.ceAtten.value / 100; updateEditorLabels(); }
+    if (editing && connections[editing]) { connections[editing].atten = +els.ceAtten.value / 100; updateEditorLabels(); saveStateSoon(); }
   });
   els.ceDisconnect.addEventListener("click", () => { if (editing) disconnect(editing); });
   els.ceClose.addEventListener("click", closeEditor);
@@ -682,7 +754,13 @@ async function init() {
     closeEditor();
   });
 
-  armDefaultSound();
+  soundIntent = saved && typeof saved.sound === "boolean" ? saved.sound : true;
+  if (soundIntent) armDefaultSound();
+  else setSoundButton(false);
+
+  // Everything restored — allow saves and persist the current state once.
+  loading = false;
+  saveState();
 
   if (!navigator.requestMIDIAccess) {
     setStatus(false, "no Web MIDI");
