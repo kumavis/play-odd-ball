@@ -636,22 +636,37 @@ class AudioEngine {
 
   // ---- Rainfall (gentle) ------------------------------------------------
   _buildRain() {
-    const ctx = this.ctx;
+    const ctx = this.ctx, t = ctx.currentTime;
     const out = this._out(); out.gain.value = 1;
-    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 3200; bp.Q.value = 0.6;
-    const hiss = ctx.createGain(); hiss.gain.value = 0;
-    this._loopNoise(bp); bp.connect(hiss).connect(out);
 
-    const voice = { out, level: 0, last: 0 };
+    // Deep roar: broadband noise rolled off low — the heavy body of a downpour
+    // pounding down. This is the loud part; no bright droplet tinkle.
+    const roarHp = ctx.createBiquadFilter(); roarHp.type = "highpass"; roarHp.frequency.value = 110;
+    const roarLp = ctx.createBiquadFilter(); roarLp.type = "lowpass"; roarLp.frequency.value = 900; roarLp.Q.value = 0.5;
+    const roarG = ctx.createGain(); roarG.gain.value = 0;
+    this._loopNoise(roarHp); roarHp.connect(roarLp).connect(roarG).connect(out);
+
+    // Sizzle: a dense mid wash (wide bandpass, NOT discrete droplets) sitting
+    // under the roar. Kept below the bright band so it reads as sheeting rain.
+    const sizBp = ctx.createBiquadFilter(); sizBp.type = "bandpass"; sizBp.frequency.value = 1400; sizBp.Q.value = 0.35;
+    const sizG = ctx.createGain(); sizG.gain.value = 0;
+    this._loopNoise(sizBp); sizBp.connect(sizG).connect(out);
+
+    // Slow gusting so the storm breathes instead of sitting as flat static.
+    const gust = ctx.createOscillator(); gust.type = "sine"; gust.frequency.value = 0.16;
+    const gustDepth = ctx.createGain(); gustDepth.gain.value = 0;
+    gust.connect(gustDepth).connect(roarG.gain); gust.start(t);
+
+    const voice = { out, level: 0 };
     voice.set = (v) => {
-      const target = v > 0.01 ? v * 0.18 : 0;
-      voice.level += (target - voice.level) * 0.1;
-      hiss.gain.value = voice.level;
-      bp.frequency.value = 2200 + v * 3500;
-      if (this._due(voice, v, 40, 220)) {                 // droplet pings
-        const hz = 1400 + Math.random() * 2600;
-        this._ping(hz, 0.03 + v * 0.05, out, 0.18, 3.1);
-      }
+      const target = v > 0.01 ? 0.12 + v * 0.58 : 0;      // loud when driven
+      voice.level += (target - voice.level) * (target > voice.level ? 0.12 : 0.06);
+      roarG.gain.value = voice.level;
+      sizG.gain.value = voice.level * 0.42;               // sizzle sits under the roar
+      // Heavier rain opens the roar filter and lifts the sizzle band a touch.
+      roarLp.frequency.value = 650 + v * 950;
+      sizBp.frequency.value = 1200 + v * 900;
+      gustDepth.gain.value = voice.level * 0.33;          // gust swing scales with level
     };
     return voice;
   }
