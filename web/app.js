@@ -1126,7 +1126,15 @@ function stopSessionRec() {
 // `atten` scales the result, so you can tune how sensitive each link is.
 //   shaped = ((raw - thresh) / (1 - thresh))  (clamped, 0 below thresh) * atten
 const INSTRUMENTS = [...AudioEngine.INSTRUMENTS, { key: "chimes", label: "Chimes" }];
-const mkConn = (source, atten = 1, thresh = 0) => ({ source, atten, thresh });
+// thresh is capped just under 1 (matching the UI slider's 0.95 max): shape()
+// divides by (1 - thresh), so a stored/imported value of exactly 1 would turn
+// the whole chain into NaN gain — and assigning NaN to an AudioParam throws.
+const CONN_THRESH_MAX = 0.95;
+const mkConn = (source, atten = 1, thresh = 0) => ({
+  source,
+  atten: clamp1(atten),
+  thresh: Math.min(CONN_THRESH_MAX, clamp1(thresh)),
+});
 // Every instrument starts unpatched; a couple get sensible defaults.
 const connections = {};
 INSTRUMENTS.forEach((inst) => { connections[inst.key] = null; });
