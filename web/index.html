@@ -48,8 +48,8 @@
           <span id="histLegend" class="hist-legend"></span>
           <div class="hist-actions">
             <button id="recSession" class="rec-btn" title="Record this session's data and download it">⏺ Record</button>
-            <button id="recMove" class="rec-btn" title="Record a move, then wire it as a trigger in the patch bay">✋ Record move</button>
-            <button id="importMove" class="rec-btn" title="Turn a recorded session file into a move trigger">📂 Import move</button>
+            <button id="recMove" class="rec-btn" title="Record a move — repeat it a few times for a more reliable trigger — then wire it in the patch bay">✋ Record move</button>
+            <button id="importMove" class="rec-btn" title="Turn a recorded session into a move trigger — every rep in it becomes an example">📂 Import move</button>
             <input id="importFile" type="file" accept="application/json,.json" hidden />
           </div>
         </div>
@@ -159,6 +159,12 @@
     <div class="gedit-canvas-wrap">
       <canvas id="geCanvas" class="gedit-canvas"></canvas>
     </div>
+    <div class="gedit-examples">
+      <span class="gedit-ex-title">examples</span>
+      <div id="geExStrip" class="gedit-ex-strip"></div>
+      <button id="geAddExample" class="gedit-mini" title="Perform the move again to add it as another example">＋ Add</button>
+      <button id="geDelExample" class="gedit-mini gedit-mini--danger" title="Remove the selected example">Remove</button>
+    </div>
     <div class="gedit-crop">
       <span id="geCropInfo" class="gedit-crop-info">crop —</span>
       <button id="geAutoTrim" class="gedit-mini">Auto-trim silence</button>
@@ -185,7 +191,7 @@
     <p><strong>Web MIDI permission needed.</strong> Use Chrome or Edge, pick the <code>ODD 1 Bluetooth</code> port above, then bounce / shake / spin the ball.</p>
   </div>
 
-  <script src="synth.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="synth.js?v=21"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>
