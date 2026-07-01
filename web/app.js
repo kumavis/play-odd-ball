@@ -6,6 +6,10 @@ const noteName = (n) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
 const NOTE_GESTURE = { 0: "Tap", 1: "Shake", 2: "Twist" };
 const NOTE_TAP = 0;
 const clamp1 = (v) => Math.max(0, Math.min(1, v));
+// Escape untrusted text (gesture/profile/device names, error messages) before
+// interpolating it into an HTML string.
+const escHtml = (s) => String(s).replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const els = {
   portSelect: document.getElementById("portSelect"),
@@ -607,7 +611,7 @@ function fireGesture(g, d) {
   // Trigger each connected instrument on its own envelope, staggered by the
   // move's spacing in play order, so the sounds fire as a sequence.
   fireChain("g:" + g.id, g.seqGap ?? SEQ_GAP_DEFAULT);
-  logEvent(`<b>GESTURE</b> ${g.name} matched · d=${d.toFixed(2)}`, "note");
+  logEvent(`<b>GESTURE</b> ${escHtml(g.name)} matched · d=${d.toFixed(2)}`, "note");
   const row = els.gestureList.querySelector(`.gesture[data-id="${g.id}"]`);
   if (row) { row.classList.add("is-hit"); setTimeout(() => row.classList.remove("is-hit"), 450); }
   if (editingGesture && editingGesture.id === g.id) {
@@ -680,7 +684,7 @@ function saveGesture(name, exampleFrames) {
   rebuildGraph();
   renderGestures();
   const n = examples.length;
-  logEvent(`<b>GESTURE</b> saved “${g.name}”${n > 1 ? ` · ${n} examples` : ""} — edit or wire it up`, "note");
+  logEvent(`<b>GESTURE</b> saved “${escHtml(g.name)}”${n > 1 ? ` · ${n} examples` : ""} — edit or wire it up`, "note");
   return g;
 }
 
@@ -804,7 +808,7 @@ function finishRecordMove() {
     const g = gestures.find((x) => x.id === rec.targetId);
     if (!g) { saveGesture(rec.name, rec.examples); return; }
     addExamplesToGesture(g, rec.examples);
-    logEvent(`<b>GESTURE</b> added ${rec.examples.length} example${rec.examples.length === 1 ? "" : "s"} to “${g.name}” · ${gestureExamples(g).length} total`, "note");
+    logEvent(`<b>GESTURE</b> added ${rec.examples.length} example${rec.examples.length === 1 ? "" : "s"} to “${escHtml(g.name)}” · ${gestureExamples(g).length} total`, "note");
     if (editingGesture && editingGesture.id === g.id) {
       editingExample = gestureExamples(g).length - 1;
       renderExampleStrip();
@@ -854,7 +858,7 @@ function renderGestures() {
     const nEx = gestureExamples(g).length;
     return `<div class="gesture" data-id="${g.id}">
       <span class="g-dot" style="background:${g.color}"></span>
-      <span class="g-name">${g.name}</span>
+      <span class="g-name">${escHtml(g.name)}</span>
       <span class="g-ex" title="${nEx} example${nEx === 1 ? "" : "s"} building this trigger">${nEx}×</span>
       <span class="g-dist">d ${dist}</span>
       <span class="g-sens-label">sensitivity</span>
@@ -1352,7 +1356,7 @@ function saveCurrentProfile() {
   writeProfiles();
   renderProfiles();
   setView("profiles", true);
-  logEvent(`<b>PROFILE</b> saved “${name}”`, "note");
+  logEvent(`<b>PROFILE</b> saved “${escHtml(name)}”`, "note");
 }
 
 function applyProfile(id) {
@@ -1404,7 +1408,7 @@ function applyProfile(id) {
   refreshConnectionStyles();
   renderGestures();
   saveState();
-  logEvent(`<b>PROFILE</b> loaded “${profile.name}”`, "note");
+  logEvent(`<b>PROFILE</b> loaded “${escHtml(profile.name)}”`, "note");
 }
 
 function deleteProfile(id) {
@@ -1515,7 +1519,7 @@ let histCtx = null;
 
 function buildHistLegend() {
   els.histLegend.innerHTML = Object.keys(PARAMS).map((k) =>
-    `<span class="item"><span class="sw" style="background:${PARAMS[k].color}"></span>${PARAMS[k].label}</span>`
+    `<span class="item"><span class="sw" style="background:${PARAMS[k].color}"></span>${escHtml(PARAMS[k].label)}</span>`
   ).join("");
 }
 
@@ -1606,7 +1610,7 @@ function buildGraph() {
   srcKeys.forEach((key) => {
     const { node, port } = makeNode(
       "gnode--src",
-      `<span class="glabel">${PARAMS[key].label}</span><canvas class="spark"></canvas><span class="gval"></span>`,
+      `<span class="glabel">${escHtml(PARAMS[key].label)}</span><canvas class="spark"></canvas><span class="gval"></span>`,
       "gport--out"
     );
     port.dataset.port = "out";
@@ -2250,7 +2254,7 @@ function bindInputs(inputs) {
   selectedWebInputs = inputs;
   for (const inp of inputs) inp.onmidimessage = onMidiMessage;
   syncActiveInputs();
-  if (inputs.length) logEvent(`listening on <b>${inputs.map((i) => i.name).join(", ")}</b>`);
+  if (inputs.length) logEvent(`listening on <b>${escHtml(inputs.map((i) => i.name).join(", "))}</b>`);
 }
 
 // Recompute the combined active-input list (Web MIDI selection + BLE balls) and
@@ -2353,7 +2357,7 @@ function removeBleInput(id) {
   const [port] = bleInputs.splice(idx, 1);
   delete deviceCc[id];
   syncActiveInputs();
-  logEvent(`Bluetooth ball <b>${port.name}</b> disconnected`);
+  logEvent(`Bluetooth ball <b>${escHtml(port.name)}</b> disconnected`);
 }
 
 async function connectBluetoothBall() {
@@ -2373,7 +2377,7 @@ async function connectBluetoothBall() {
   } catch (err) {
     if (err && err.name === "NotFoundError") return;  // user dismissed the chooser
     els.hint.classList.remove("hide");
-    els.hint.innerHTML = `<p><strong>Bluetooth pairing failed.</strong> ${err}</p>`;
+    els.hint.innerHTML = `<p><strong>Bluetooth pairing failed.</strong> ${escHtml(err)}</p>`;
     return;
   }
   const id = `ble:${device.id}`;
@@ -2395,11 +2399,11 @@ async function connectBluetoothBall() {
     await char.startNotifications();
     bleInputs.push(port);
     syncActiveInputs();
-    logEvent(`Bluetooth ball <b>${port.name}</b> connected`, "note");
+    logEvent(`Bluetooth ball <b>${escHtml(port.name)}</b> connected`, "note");
   } catch (err) {
     try { device.gatt && device.gatt.disconnect(); } catch (_) {}
     els.hint.classList.remove("hide");
-    els.hint.innerHTML = `<p><strong>Bluetooth connect failed.</strong> ${err}</p>`;
+    els.hint.innerHTML = `<p><strong>Bluetooth connect failed.</strong> ${escHtml(err)}</p>`;
     syncActiveInputs();
   }
 }
@@ -2582,7 +2586,7 @@ async function init() {
       els.portSelect.addEventListener("change", (e) => applySelection(e.target.value));
     } catch (err) {
       setStatus(false, "permission denied");
-      els.hint.innerHTML = `<p><strong>MIDI permission denied.</strong> Reload and allow MIDI access. (${err})</p>`;
+      els.hint.innerHTML = `<p><strong>MIDI permission denied.</strong> Reload and allow MIDI access. (${escHtml(err)})</p>`;
     }
   }
 
