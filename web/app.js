@@ -34,6 +34,23 @@ const els = {
   importMove: document.getElementById("importMove"),
   importFile: document.getElementById("importFile"),
   gestureList: document.getElementById("gestureList"),
+  gestureEditor: document.getElementById("gestureEditor"),
+  gestureBackdrop: document.getElementById("gestureBackdrop"),
+  geDot: document.getElementById("geDot"),
+  geName: document.getElementById("geName"),
+  geClose: document.getElementById("geClose"),
+  geCanvas: document.getElementById("geCanvas"),
+  geCropInfo: document.getElementById("geCropInfo"),
+  geAutoTrim: document.getElementById("geAutoTrim"),
+  geCropReset: document.getElementById("geCropReset"),
+  geSens: document.getElementById("geSens"),
+  geSensVal: document.getElementById("geSensVal"),
+  geCool: document.getElementById("geCool"),
+  geCoolVal: document.getElementById("geCoolVal"),
+  geDist: document.getElementById("geDist"),
+  geThreshShow: document.getElementById("geThreshShow"),
+  geMatch: document.getElementById("geMatch"),
+  geDelete: document.getElementById("geDelete"),
   drawer: document.getElementById("drawer"),
   viewToggles: document.getElementById("viewToggles"),
   connEditor: document.getElementById("connEditor"),
@@ -113,6 +130,7 @@ const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // orientation + spin CCs
 // the same order — used to rebuild feature frames when importing a session.
 const GEST_DIM_KEYS = ["tilt_x", "tilt_y", "tilt_z", "cc3", "cc4", "cc5", "cc6"];
 const GEST_N = 32;                        // template length after resampling
+const RAW_N = 96;                         // stored raw resolution (for editing/crop)
 const GEST_ACT_TAU = 0.15;                // s; smoothing for the activity signal
 const SEG_START = 4.0;                    // activity (Σ|Δfeat|/s) that begins a move
 const SEG_END = 1.4;                      // activity under which the ball is "still"
@@ -168,23 +186,31 @@ function activeRegion(frames) {
   return frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
 }
 
-// Resample a variable-length list of frames to N points, mean-center each
-// dimension (so absolute orientation offset doesn't matter), then divide every
-// dimension by a single shared scale — the most active dimension's spread. Per-
-// dimension z-scoring is deliberately avoided: it blows tiny sensor jitter on
-// otherwise-still axes up to full scale and wrecks matching. A shared scale
-// keeps quiet axes quiet while still giving overall amplitude invariance.
-function resampleNorm(frames, N) {
+// Linear-resample a variable-length list of feature rows to exactly N rows.
+function resample(frames, N) {
   const D = GEST_DIMS.length;
+  const src = frames.length ? frames : [new Array(D).fill(0)];
   const out = [];
   for (let i = 0; i < N; i++) {
-    const pos = (i / (N - 1)) * (frames.length - 1);
-    const lo = Math.floor(pos), hi = Math.min(frames.length - 1, lo + 1);
+    const pos = src.length === 1 ? 0 : (i / (N - 1)) * (src.length - 1);
+    const lo = Math.floor(pos), hi = Math.min(src.length - 1, lo + 1);
     const f = pos - lo;
     const row = new Array(D);
-    for (let d = 0; d < D; d++) row[d] = frames[lo][d] * (1 - f) + frames[hi][d] * f;
+    for (let d = 0; d < D; d++) row[d] = src[lo][d] * (1 - f) + src[hi][d] * f;
     out.push(row);
   }
+  return out;
+}
+
+// Mean-center each dimension (so absolute orientation offset doesn't matter),
+// then divide every dimension by a single shared scale — the most active
+// dimension's spread. Per-dimension z-scoring is deliberately avoided: it blows
+// tiny sensor jitter on otherwise-still axes up to full scale and wrecks
+// matching. A shared scale keeps quiet axes quiet while giving amplitude
+// invariance. Operates on a copy so the caller's raw rows stay 0..1.
+function normalizeShared(rows) {
+  const D = GEST_DIMS.length, N = rows.length;
+  const out = rows.map((r) => r.slice());
   let maxVar = 0;
   for (let d = 0; d < D; d++) {
     let mean = 0;
@@ -198,6 +224,42 @@ function resampleNorm(frames, N) {
   const inv = 1 / Math.max(Math.sqrt(maxVar), 0.02);
   for (let i = 0; i < N; i++) for (let d = 0; d < D; d++) out[i][d] *= inv;
   return out;
+}
+
+const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
+
+// A gesture keeps its raw 0..1 capture (resampled to RAW_N so storage is
+// bounded) plus a crop window; the DTW template is derived from the cropped
+// region. This lets a saved move be re-cropped and re-tuned after the fact.
+function makeTemplate(raw, crop) {
+  const a = raw.slice(crop.start, crop.end + 1);
+  return resampleNorm(a.length >= 2 ? a : raw, GEST_N);
+}
+
+// Find the active span of a raw capture using a scale-free activity measure
+// (per-step change smoothed, thresholded relative to its own peak) so "cut
+// silence" works regardless of how hard the move was.
+function autoTrim(raw) {
+  const n = raw.length;
+  if (n < 4) return { start: 0, end: n - 1 };
+  const act = new Array(n).fill(0);
+  let ema = 0, peak = 0;
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    if (i) for (let d = 0; d < raw[i].length; d++) s += Math.abs(raw[i][d] - raw[i - 1][d]);
+    ema = ema * 0.6 + s * 0.4;
+    act[i] = ema;
+    if (ema > peak) peak = ema;
+  }
+  const thresh = Math.max(peak * 0.14, 1e-4);
+  let start = 0, end = n - 1;
+  while (start < n && act[start] < thresh) start++;
+  while (end > start && act[end] < thresh) end--;
+  const pad = Math.round(n * 0.04);
+  start = Math.max(0, start - pad);
+  end = Math.min(n - 1, end + pad);
+  if (end - start < 2) return { start: 0, end: n - 1 };
+  return { start, end };
 }
 
 // DTW distance between two equal-length z-normalized sequences. Local cost is
@@ -249,13 +311,12 @@ function handleSegment(now, feat) {
 }
 
 function processSegment(frames) {
-  const norm = resampleNorm(frames, GEST_N);
   if (recordingGesture) {
-    saveGesture(recordingGesture.name, norm);
+    saveGesture(recordingGesture.name, frames);   // frames are raw 0..1 rows
     recordingGesture = null;
     updateRecMoveBtn();
   } else {
-    recognize(norm);
+    recognize(resampleNorm(frames, GEST_N));
   }
 }
 
@@ -272,12 +333,24 @@ function recognize(norm) {
 
 function fireGesture(g, d) {
   const now = performance.now();
-  if (now - (gestureCool[g.id] || 0) < 500) return;
+  if (now - (gestureCool[g.id] || 0) < (g.cooldown || 500)) return;
   gestureCool[g.id] = now;
   gestureEnv[g.id] = 1;
   logEvent(`<b>GESTURE</b> ${g.name} matched · d=${d.toFixed(2)}`, "note");
   const row = els.gestureList.querySelector(`.gesture[data-id="${g.id}"]`);
   if (row) { row.classList.add("is-hit"); setTimeout(() => row.classList.remove("is-hit"), 450); }
+  if (editingGesture && editingGesture.id === g.id) {
+    els.geMatch.classList.add("on");
+    setTimeout(() => els.geMatch.classList.remove("on"), 450);
+  }
+}
+
+// Reflect the editing gesture's latest live match distance in the editor.
+function updateEditorLive() {
+  const g = editingGesture;
+  if (!g) return;
+  els.geDist.textContent = typeof g._dist === "number" ? g._dist.toFixed(2) : "—";
+  els.geDist.style.color = (typeof g._dist === "number" && g._dist <= g.threshold) ? "var(--good)" : "";
 }
 
 // ---- Gesture storage + patch-bay integration ----------------------------
@@ -306,20 +379,26 @@ function unregisterGestureParam(id) {
   }
 }
 
-function saveGesture(name, template) {
+function saveGesture(name, rawFrames) {
+  const raw = resample(rawFrames, RAW_N);
+  const crop = { start: 0, end: RAW_N - 1 };
   const g = {
     id: "g" + Date.now().toString(36),
     name: name || `Move ${gestures.length + 1}`,
     color: GEST_PALETTE[gestures.length % GEST_PALETTE.length],
     threshold: GEST_THRESH_DEFAULT,
-    template,
+    cooldown: 500,
+    raw,
+    crop,
+    template: makeTemplate(raw, crop),
   };
   gestures.push(g);
   registerGestureParam(g);
   persistGestures();
   rebuildGraph();
   renderGestures();
-  logEvent(`<b>GESTURE</b> saved “${g.name}” — wire it up in the patch bay`, "note");
+  logEvent(`<b>GESTURE</b> saved “${g.name}” — edit or wire it up in the patch bay`, "note");
+  return g;
 }
 
 function deleteGesture(id) {
@@ -332,8 +411,12 @@ function deleteGesture(id) {
 
 function persistGestures() {
   try {
+    // Round raw values to keep stored JSON compact.
     const data = gestures.map((g) => ({
-      id: g.id, name: g.name, color: g.color, threshold: g.threshold, template: g.template,
+      id: g.id, name: g.name, color: g.color,
+      threshold: g.threshold, cooldown: g.cooldown,
+      crop: g.crop,
+      raw: g.raw.map((r) => r.map((v) => +v.toFixed(4))),
     }));
     localStorage.setItem(GESTURE_KEY, JSON.stringify(data));
   } catch (e) { /* storage unavailable — ignore */ }
@@ -343,13 +426,26 @@ function loadGestures() {
   let data = null;
   try { data = JSON.parse(localStorage.getItem(GESTURE_KEY) || "null"); } catch (e) { data = null; }
   if (!Array.isArray(data)) return;
-  gestures = data.filter((g) => g && Array.isArray(g.template) && g.template.length === GEST_N)
-    .map((g) => ({
+  gestures = data.map((g) => {
+    if (!g) return null;
+    // New format stores raw + crop; migrate the old template-only format by
+    // treating the stored template as the raw capture.
+    let raw = Array.isArray(g.raw) ? g.raw : (Array.isArray(g.template) ? g.template : null);
+    if (!raw || !raw.length || !Array.isArray(raw[0])) return null;
+    raw = resample(raw, RAW_N);
+    let crop = g.crop && typeof g.crop.start === "number" && typeof g.crop.end === "number"
+      ? { start: Math.max(0, Math.min(RAW_N - 1, g.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, g.crop.end)) }
+      : { start: 0, end: RAW_N - 1 };
+    if (crop.end <= crop.start) crop = { start: 0, end: RAW_N - 1 };
+    return {
       id: g.id, name: g.name || "Move",
       color: g.color || GEST_PALETTE[0],
       threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
-      template: g.template,
-    }));
+      cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
+      raw, crop,
+      template: makeTemplate(raw, crop),
+    };
+  }).filter(Boolean);
   for (const g of gestures) registerGestureParam(g);
 }
 
@@ -391,7 +487,7 @@ function importSessionFile(file) {
     const suggested = (file.name || "Imported move").replace(/\.json$/i, "").replace(/^oddball-session-.*$/, "Imported move");
     const name = (window.prompt("Name this imported move:", suggested) || "").trim();
     if (!name) return;
-    saveGesture(name, resampleNorm(active, GEST_N));
+    saveGesture(name, active);   // raw 0..1 rows
   };
   reader.readAsText(file);
 }
@@ -405,10 +501,145 @@ function renderGestures() {
       <span class="g-dist">d ${dist}</span>
       <span class="g-sens-label">sensitivity</span>
       <input class="g-sens" type="range" min="0" max="100" value="${threshToSens(g.threshold)}" data-id="${g.id}" />
+      <button class="g-edit" data-id="${g.id}" title="Edit / crop move">✎</button>
       <button class="g-del" data-id="${g.id}" title="Delete move">×</button>
     </div>`;
   }).join("");
 }
+
+// ---- Gesture editor: crop out silence + tune per-move settings -----------
+const GEST_DIM_COLORS = GEST_DIM_KEYS.map((k) => (PARAMS[k] && PARAMS[k].color) || "#8b90b8");
+let editingGesture = null;   // the gesture object currently open in the editor
+let geDrag = null;           // "start" | "end" while dragging a crop handle
+let gPersistTimer = null;
+
+function persistGesturesSoon() {
+  clearTimeout(gPersistTimer);
+  gPersistTimer = setTimeout(persistGestures, 200);
+}
+
+function openGestureEditor(id) {
+  const g = gestures.find((x) => x.id === id);
+  if (!g) return;
+  editingGesture = g;
+  els.geDot.style.background = g.color;
+  els.geName.value = g.name;
+  els.geSens.value = threshToSens(g.threshold);
+  els.geCool.value = g.cooldown || 500;
+  updateEditorSettingLabels();
+  els.gestureEditor.classList.remove("gedit--hidden");
+  els.gestureBackdrop.classList.remove("gedit-backdrop--hidden");
+  drawGestureEditor();
+}
+
+function closeGestureEditor() {
+  editingGesture = null;
+  geDrag = null;
+  els.gestureEditor.classList.add("gedit--hidden");
+  els.gestureBackdrop.classList.add("gedit-backdrop--hidden");
+}
+
+function updateEditorSettingLabels() {
+  const g = editingGesture;
+  if (!g) return;
+  els.geSensVal.textContent = threshToSens(g.threshold);
+  els.geCoolVal.textContent = `${Math.round(g.cooldown || 500)} ms`;
+  els.geThreshShow.textContent = g.threshold.toFixed(2);
+  const span = g.crop.end - g.crop.start + 1;
+  els.geCropInfo.textContent = `crop ${g.crop.start}–${g.crop.end} of ${RAW_N} (${Math.round((span / RAW_N) * 100)}%)`;
+}
+
+function recomputeEditingTemplate() {
+  const g = editingGesture;
+  if (!g) return;
+  g.template = makeTemplate(g.raw, g.crop);
+  updateEditorSettingLabels();
+  persistGesturesSoon();
+}
+
+function drawGestureEditor() {
+  const g = editingGesture;
+  if (!g) return;
+  const cv = els.geCanvas;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = cv.clientWidth, ch = cv.clientHeight;
+  if (!cw || !ch) return;
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) {
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  }
+  const ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height, pad = 8 * dpr;
+  ctx.clearRect(0, 0, W, H);
+
+  const raw = g.raw, N = raw.length, D = raw[0].length;
+  let mn = Infinity, mx = -Infinity;
+  for (let i = 0; i < N; i++) for (let d = 0; d < D; d++) { const v = raw[i][d]; if (v < mn) mn = v; if (v > mx) mx = v; }
+  const range = mx - mn || 1;
+  const xOf = (i) => (i / (N - 1)) * W;
+  const yOf = (v) => H - pad - ((v - mn) / range) * (H - pad * 2);
+
+  // Excluded (cropped-out) regions dimmed.
+  const xs = xOf(g.crop.start), xe = xOf(g.crop.end);
+  ctx.fillStyle = "rgba(4,6,14,0.62)";
+  ctx.fillRect(0, 0, xs, H);
+  ctx.fillRect(xe, 0, W - xe, H);
+
+  // Baseline grid.
+  ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let k = 0; k <= 4; k++) { const y = (k / 4) * (H - 2) + 1; ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+
+  // Per-dimension traces.
+  for (let d = 0; d < D; d++) {
+    ctx.strokeStyle = GEST_DIM_COLORS[d];
+    ctx.globalAlpha = 0.8; ctx.lineWidth = 1.4 * dpr; ctx.lineJoin = "round";
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) { const x = xOf(i), y = yOf(raw[i][d]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  // Crop handles.
+  for (const x of [xs, xe]) {
+    ctx.strokeStyle = "#00e5ff"; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    ctx.fillStyle = "#00e5ff";
+    ctx.fillRect(x - 3 * dpr, H / 2 - 12 * dpr, 6 * dpr, 24 * dpr);
+  }
+}
+
+function editorIndexFromEvent(e) {
+  const r = els.geCanvas.getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  return Math.round(frac * (RAW_N - 1));
+}
+
+function onEditorPointerDown(e) {
+  if (!editingGesture) return;
+  const r = els.geCanvas.getBoundingClientRect();
+  const g = editingGesture;
+  const px = (i) => (i / (RAW_N - 1)) * r.width;
+  const x = e.clientX - r.left;
+  const dStart = Math.abs(x - px(g.crop.start)), dEnd = Math.abs(x - px(g.crop.end));
+  geDrag = dStart <= dEnd ? "start" : "end";
+  els.geCanvas.setPointerCapture(e.pointerId);
+  onEditorPointerMove(e);
+}
+
+function onEditorPointerMove(e) {
+  if (!editingGesture || !geDrag) return;
+  const g = editingGesture;
+  let idx = editorIndexFromEvent(e);
+  if (geDrag === "start") g.crop.start = Math.min(idx, g.crop.end - 2);
+  else g.crop.end = Math.max(idx, g.crop.start + 2);
+  g.crop.start = Math.max(0, g.crop.start);
+  g.crop.end = Math.min(RAW_N - 1, g.crop.end);
+  recomputeEditingTemplate();
+  drawGestureEditor();
+}
+
+function onEditorPointerUp() { geDrag = null; }
 
 // ---- Session recording: capture the input stream, then download it -------
 let sessionRec = null;         // { start, last, samples: [] }
@@ -1317,12 +1548,57 @@ async function init() {
     const sl = e.target.closest(".g-sens");
     if (!sl) return;
     const g = gestures.find((x) => x.id === sl.dataset.id);
-    if (g) { g.threshold = sensToThresh(+sl.value); persistGestures(); }
+    if (g) { g.threshold = sensToThresh(+sl.value); persistGestures(); if (editingGesture === g) updateEditorSettingLabels(); }
   });
   els.gestureList.addEventListener("click", (e) => {
     const del = e.target.closest(".g-del");
-    if (del) deleteGesture(del.dataset.id);
+    if (del) { deleteGesture(del.dataset.id); if (editingGesture && editingGesture.id === del.dataset.id) closeGestureEditor(); return; }
+    const edit = e.target.closest(".g-edit");
+    if (edit) openGestureEditor(edit.dataset.id);
   });
+
+  // Gesture editor wiring.
+  els.geClose.addEventListener("click", closeGestureEditor);
+  els.gestureBackdrop.addEventListener("click", closeGestureEditor);
+  els.geName.addEventListener("input", () => {
+    if (!editingGesture) return;
+    editingGesture.name = els.geName.value || "Move";
+    if (PARAMS["g:" + editingGesture.id]) PARAMS["g:" + editingGesture.id].label = "✋ " + editingGesture.name;
+    renderGestures(); buildHistLegend();
+    if (graph.srcNodes["g:" + editingGesture.id]) graph.srcNodes["g:" + editingGesture.id].querySelector(".glabel").textContent = "✋ " + editingGesture.name;
+    persistGesturesSoon();
+  });
+  els.geSens.addEventListener("input", () => {
+    if (!editingGesture) return;
+    editingGesture.threshold = sensToThresh(+els.geSens.value);
+    updateEditorSettingLabels(); renderGestures(); persistGesturesSoon();
+  });
+  els.geCool.addEventListener("input", () => {
+    if (!editingGesture) return;
+    editingGesture.cooldown = +els.geCool.value;
+    updateEditorSettingLabels(); persistGesturesSoon();
+  });
+  els.geAutoTrim.addEventListener("click", () => {
+    if (!editingGesture) return;
+    editingGesture.crop = autoTrim(editingGesture.raw);
+    recomputeEditingTemplate(); drawGestureEditor();
+  });
+  els.geCropReset.addEventListener("click", () => {
+    if (!editingGesture) return;
+    editingGesture.crop = { start: 0, end: RAW_N - 1 };
+    recomputeEditingTemplate(); drawGestureEditor();
+  });
+  els.geDelete.addEventListener("click", () => {
+    if (!editingGesture) return;
+    const id = editingGesture.id;
+    closeGestureEditor();
+    deleteGesture(id);
+  });
+  els.geCanvas.addEventListener("pointerdown", onEditorPointerDown);
+  els.geCanvas.addEventListener("pointermove", onEditorPointerMove);
+  els.geCanvas.addEventListener("pointerup", onEditorPointerUp);
+  window.addEventListener("resize", () => { if (editingGesture) drawGestureEditor(); });
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && editingGesture) closeGestureEditor(); });
   els.sens.addEventListener("input", (e) => { applySensitivity(+e.target.value); saveStateSoon(); });
   applySensitivity(+els.sens.value);
 
@@ -1403,6 +1679,7 @@ async function init() {
     sampleSparks();
     drawSparks();
     drawHistory();
+    updateEditorLive();
     sampleSession(now);
 
     if (now - lastRate >= 1000) {

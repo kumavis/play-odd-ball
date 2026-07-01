@@ -257,11 +257,73 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .g-dist { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; width: 66px; }
 .g-sens-label { font-size: 11px; color: var(--muted); margin-left: auto; }
 .g-sens { width: 130px; accent-color: var(--accent); }
-.g-del {
+.g-edit, .g-del {
   background: none; border: 1px solid var(--line); color: var(--muted);
   border-radius: 6px; width: 24px; height: 24px; cursor: pointer; flex: 0 0 auto;
+  font-size: 13px; line-height: 1;
 }
+.g-edit:hover { color: var(--accent-2); border-color: var(--accent-2); }
 .g-del:hover { color: var(--warn); border-color: var(--warn); }
+
+/* ---- Gesture editor modal ---- */
+.gedit {
+  position: fixed; z-index: 50;
+  left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(680px, 94vw);
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 16px; padding: 16px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.gedit--hidden { display: none; }
+.gedit-head { display: flex; align-items: center; gap: 10px; }
+.gedit-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.gedit-name {
+  flex: 1 1 auto; font-size: 15px; font-weight: 600; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px;
+}
+.gedit-name:focus { outline: none; border-color: var(--accent-2); }
+.gedit-close {
+  background: none; border: none; color: var(--muted); font-size: 22px;
+  cursor: pointer; line-height: 1; padding: 0 4px;
+}
+.gedit-close:hover { color: var(--text); }
+.gedit-canvas-wrap { position: relative; }
+.gedit-canvas {
+  width: 100%; height: 180px; display: block;
+  background: #0c0e1a; border: 1px solid var(--line); border-radius: 12px;
+  cursor: ew-resize; touch-action: none;
+}
+.gedit-crop { display: flex; align-items: center; gap: 10px; }
+.gedit-crop-info { font-size: 12px; color: var(--muted); flex: 1 1 auto; font-variant-numeric: tabular-nums; }
+.gedit-mini {
+  font-size: 12px; padding: 5px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer;
+}
+.gedit-mini:hover { background: #232743; }
+.gedit-row { display: flex; align-items: center; gap: 12px; }
+.gedit-row label { font-size: 13px; color: var(--muted); width: 150px; flex: 0 0 auto; }
+.gedit-row input[type="range"] { flex: 1 1 auto; accent-color: var(--accent-2); }
+.gedit-num { color: var(--text); font-variant-numeric: tabular-nums; }
+.gedit-live {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px;
+}
+.gedit-live b { color: var(--text); font-variant-numeric: tabular-nums; }
+.gedit-match {
+  font-size: 12px; font-weight: 700; letter-spacing: 1px; color: #061018;
+  background: var(--good); border-radius: 6px; padding: 3px 8px; opacity: 0; transition: opacity 0.1s ease;
+}
+.gedit-match.on { opacity: 1; }
+.gedit-actions { display: flex; justify-content: flex-end; }
+.gedit-del {
+  font-size: 12px; padding: 7px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer;
+}
+.gedit-del:hover { color: var(--warn); border-color: var(--warn); }
+.gedit-backdrop { position: fixed; inset: 0; z-index: 49; background: rgba(4,6,14,0.55); }
+.gedit-backdrop--hidden { display: none; }
 
 /* ---- Drawer: secondary views overlay on the right ---- */
 .drawer {

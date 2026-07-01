@@ -121,6 +121,38 @@
     <button id="ceDisconnect" class="ce-disconnect">Disconnect</button>
   </div>
 
+  <div id="gestureBackdrop" class="gedit-backdrop gedit-backdrop--hidden"></div>
+  <div id="gestureEditor" class="gedit gedit--hidden">
+    <div class="gedit-head">
+      <span class="gedit-dot" id="geDot"></span>
+      <input id="geName" class="gedit-name" type="text" spellcheck="false" />
+      <button id="geClose" class="gedit-close" title="Close">×</button>
+    </div>
+    <div class="gedit-canvas-wrap">
+      <canvas id="geCanvas" class="gedit-canvas"></canvas>
+    </div>
+    <div class="gedit-crop">
+      <span id="geCropInfo" class="gedit-crop-info">crop —</span>
+      <button id="geAutoTrim" class="gedit-mini">Auto-trim silence</button>
+      <button id="geCropReset" class="gedit-mini">Reset</button>
+    </div>
+    <div class="gedit-row">
+      <label>sensitivity <span id="geSensVal" class="gedit-num"></span></label>
+      <input id="geSens" type="range" min="0" max="100" />
+    </div>
+    <div class="gedit-row">
+      <label>retrigger gap <span id="geCoolVal" class="gedit-num"></span></label>
+      <input id="geCool" type="range" min="150" max="2500" step="50" />
+    </div>
+    <div class="gedit-live">
+      <span>live distance <b id="geDist">—</b> · fires under <b id="geThreshShow">—</b></span>
+      <span id="geMatch" class="gedit-match">MATCH</span>
+    </div>
+    <div class="gedit-actions">
+      <button id="geDelete" class="gedit-del">Delete move</button>
+    </div>
+  </div>
+
   <div id="hint" class="hint">
     <p><strong>Web MIDI permission needed.</strong> Use Chrome or Edge, pick the <code>ODD 1 Bluetooth</code> port above, then bounce / shake / spin the ball.</p>
   </div>
