@@ -885,6 +885,16 @@ function deleteProfile(id) {
   renderProfiles();
 }
 
+function renameProfile(id) {
+  const p = profiles.find((x) => x.id === id);
+  if (!p) return;
+  const name = (window.prompt("Rename profile:", p.name) || "").trim();
+  if (!name || name === p.name) return;
+  p.name = name;
+  writeProfiles();
+  renderProfiles();
+}
+
 function renderProfiles() {
   const box = els.profileList;
   if (!box) return;
@@ -907,6 +917,7 @@ function renderProfiles() {
         `<div class="profile-meta">${nSounds} sound${nSounds === 1 ? "" : "s"} · ${nMoves} move${nMoves === 1 ? "" : "s"}</div>` +
       `</div>` +
       `<button class="profile-load" data-load="${p.id}">Load</button>` +
+      `<button class="profile-edit" data-edit="${p.id}" title="Rename profile">✎</button>` +
       `<button class="profile-del" data-del="${p.id}" title="Delete profile">×</button>`;
     row.querySelector(".profile-name").textContent = p.name;
     box.appendChild(row);
@@ -1710,6 +1721,8 @@ async function init() {
   els.profileList.addEventListener("click", (e) => {
     const load = e.target.closest(".profile-load");
     if (load) { applyProfile(load.dataset.load); return; }
+    const edit = e.target.closest(".profile-edit");
+    if (edit) { renameProfile(edit.dataset.edit); return; }
     const del = e.target.closest(".profile-del");
     if (del) {
       const p = profiles.find((x) => x.id === del.dataset.del);

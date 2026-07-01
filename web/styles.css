@@ -305,12 +305,14 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .profile-main { flex: 1 1 auto; min-width: 0; }
 .profile-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile-meta { font-size: 11px; color: var(--muted); }
-.profile-load, .profile-del {
+.profile-load, .profile-edit, .profile-del {
   border: 1px solid var(--line); background: var(--panel); color: var(--muted);
   border-radius: 6px; cursor: pointer; flex: 0 0 auto;
   font-size: 12px; font-weight: 600; padding: 6px 10px; line-height: 1;
 }
 .profile-load:hover { color: var(--accent-2); border-color: var(--accent-2); }
+.profile-edit { width: 28px; padding: 6px 0; text-align: center; }
+.profile-edit:hover { color: var(--accent-2); border-color: var(--accent-2); }
 .profile-del { width: 28px; padding: 6px 0; text-align: center; }
 .profile-del:hover { color: var(--warn); border-color: var(--warn); }
 
