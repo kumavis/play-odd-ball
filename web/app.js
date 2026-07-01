@@ -2578,8 +2578,11 @@ async function init() {
     lastFrame = now;
     // Average the per-device roll motion so binding N balls doesn't inflate
     // the rate N-fold (which would peg roll speed with several controllers).
-    const nDev = Math.max(1, activeInputs.length);
-    const changePerSec = (rollAccum / nDev) / dt;  // CC units/second on channels 4-6
+    // Count devices that have actually sent CCs, not every bound port — a
+    // silent extra input (IAC bus, keyboard) must not halve the rate and
+    // effectively raise the gate on the one ball that is really rolling.
+    const nDev = Math.max(1, Object.keys(deviceCc).length);
+    const changePerSec = (rollAccum / nDev) / dt;  // CC units/second on channels 3-5
     rollAccum = 0;
     // The ball sends CC4-6 in tight bursts, so the per-frame rate is very
     // spiky. Use a time-weighted EMA (framerate-independent) so the smoothed
