@@ -25,6 +25,10 @@ const els = {
   sens: document.getElementById("sens"),
   sensVal: document.getElementById("sensVal"),
   graph: document.getElementById("graph"),
+  histDock: document.getElementById("histDock"),
+  histToggle: document.getElementById("histToggle"),
+  histCanvas: document.getElementById("histCanvas"),
+  histLegend: document.getElementById("histLegend"),
   drawer: document.getElementById("drawer"),
   viewToggles: document.getElementById("viewToggles"),
   connEditor: document.getElementById("connEditor"),
@@ -118,6 +122,7 @@ function serializeState() {
     sensitivity: +els.sens.value,
     sound: soundIntent,
     views,
+    histOpen: !els.histDock.classList.contains("hist-dock--collapsed"),
   };
 }
 
@@ -233,6 +238,57 @@ function drawSpark(key) {
 
 function drawSparks() {
   for (const key in graph.sparkCanvas) drawSpark(key);
+}
+
+// ---- Bottom histogram: all patch inputs on one time-series --------------
+let histCtx = null;
+
+function setupHistory() {
+  histCtx = els.histCanvas.getContext("2d");
+  els.histLegend.innerHTML = Object.keys(PARAMS).map((k) =>
+    `<span class="item"><span class="sw" style="background:${PARAMS[k].color}"></span>${PARAMS[k].label}</span>`
+  ).join("");
+}
+
+function histOpen() {
+  return !els.histDock.classList.contains("hist-dock--collapsed");
+}
+
+function setHistOpen(open) {
+  els.histDock.classList.toggle("hist-dock--collapsed", !open);
+  els.histToggle.classList.toggle("is-open", open);
+  layoutGraph();   // the graph area resizes when the dock opens/closes
+  saveStateSoon();
+}
+
+function drawHistory() {
+  if (!histCtx || !histOpen()) return;
+  const cv = els.histCanvas;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = cv.clientWidth, ch = cv.clientHeight;
+  if (!cw || !ch) return;
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) {
+    cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr);
+  }
+  const ctx = histCtx, W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = "rgba(255,255,255,0.06)"; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let g = 0; g <= 4; g++) { const y = (g / 4) * (H - 2) + 1; ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  for (const key in PARAMS) {
+    const buf = sparkBuf[key];
+    if (!buf || buf.length < 2) continue;
+    ctx.strokeStyle = PARAMS[key].color;
+    ctx.lineWidth = 1.5 * dpr; ctx.lineJoin = "round";
+    ctx.beginPath();
+    for (let i = 0; i < buf.length; i++) {
+      const x = (i / (SPARK_MAX - 1)) * W;
+      const y = H - 1 - clamp1(buf[i]) * (H - 2);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
 }
 
 // ---- Patch-bay graph ----------------------------------------------------
@@ -821,6 +877,10 @@ async function init() {
     for (const v in saved.views) setView(v, !!saved.views[v]);
   }
 
+  setupHistory();
+  if (saved && typeof saved.histOpen === "boolean") setHistOpen(saved.histOpen);
+  els.histToggle.addEventListener("click", () => setHistOpen(!histOpen()));
+
   els.soundToggle.addEventListener("click", toggleSound);
   els.randomPatch.addEventListener("click", randomizePatch);
   els.sens.addEventListener("input", (e) => { applySensitivity(+e.target.value); saveStateSoon(); });
@@ -892,6 +952,7 @@ async function init() {
     renderRoll();
     sampleSparks();
     drawSparks();
+    drawHistory();
 
     if (now - lastRate >= 1000) {
       const rate = Math.round((msgCount - lastCount) * 1000 / (now - lastRate));

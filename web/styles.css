@@ -196,6 +196,30 @@ body { display: flex; flex-direction: column; height: 100vh; }
   50% { box-shadow: 0 0 0 6px rgba(0,229,255,0.12), 0 0 16px var(--accent-2); }
 }
 
+/* ---- Bottom histogram dock ---- */
+.hist-dock { flex: 0 0 auto; margin-top: 12px; display: flex; flex-direction: column; }
+.hist-dock-head {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 8px 12px; cursor: pointer; color: var(--text); text-align: left;
+}
+.hist-dock-head:hover { background: #232743; }
+.hist-dock-caret { color: var(--muted); transition: transform 0.15s ease; font-size: 11px; }
+.hist-dock:not(.hist-dock--collapsed) .hist-dock-caret { transform: rotate(90deg); }
+.hist-dock-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted);
+  white-space: nowrap;
+}
+.hist-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); overflow: hidden; }
+.hist-legend .item { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.hist-legend .sw { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.hist-canvas {
+  width: 100%; height: 150px; display: block; margin-top: 8px;
+  background: #0c0e1a; border: 1px solid var(--line); border-radius: 12px;
+}
+.hist-dock--collapsed .hist-canvas { display: none; }
+.hist-dock--collapsed .hist-legend { display: none; }
+
 /* ---- Drawer: secondary views overlay on the right ---- */
 .drawer {
   position: absolute; top: 0; right: 0; bottom: 0;

@@ -35,6 +35,15 @@
       <div id="graph" class="graph">
         <svg id="graphSvg" class="graph-svg"></svg>
       </div>
+
+      <div id="histDock" class="hist-dock hist-dock--collapsed">
+        <button id="histToggle" class="hist-dock-head" title="Toggle input history">
+          <span class="hist-dock-caret">▸</span>
+          <span class="hist-dock-title">Input history</span>
+          <span id="histLegend" class="hist-legend"></span>
+        </button>
+        <canvas id="histCanvas" class="hist-canvas"></canvas>
+      </div>
     </section>
 
     <aside id="drawer" class="drawer">
