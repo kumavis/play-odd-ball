@@ -561,6 +561,26 @@ body { display: flex; flex-direction: column; height: 100vh; }
 }
 .ce-meter-in { position: absolute; inset: 0; width: 0%; background: rgba(139,144,184,0.35); }
 .ce-meter-out { position: absolute; inset: 0; width: 0%; background: linear-gradient(90deg, var(--accent), var(--good)); }
+.ce-seq {
+  margin-bottom: 12px; padding: 10px; border-radius: 10px;
+  background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.22);
+}
+.ce-seq--hidden { display: none; }
+.ce-seq-head {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--accent-2); margin-bottom: 8px;
+}
+.ce-seq-head span { color: var(--text); font-weight: 700; }
+.ce-seq-order { display: flex; gap: 6px; margin-bottom: 12px; }
+.ce-seq-btn {
+  flex: 1 1 0; font-size: 11px; font-weight: 600; cursor: pointer;
+  padding: 6px 4px; border-radius: 7px; color: var(--text);
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.ce-seq-btn:hover:not(:disabled) { border-color: var(--accent-2); color: var(--accent-2); }
+.ce-seq-btn:disabled { opacity: 0.4; cursor: default; }
+.ce-seq .ce-row { margin-bottom: 0; }
+
 .ce-disconnect {
   width: 100%; font-size: 12px; font-weight: 600; cursor: pointer;
   padding: 8px; border-radius: 9px; color: var(--warn);

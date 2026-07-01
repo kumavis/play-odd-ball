@@ -67,6 +67,12 @@ const els = {
   ceMeterIn: document.getElementById("ceMeterIn"),
   ceMeterOut: document.getElementById("ceMeterOut"),
   ceDisconnect: document.getElementById("ceDisconnect"),
+  ceSeq: document.getElementById("ceSeq"),
+  ceSeqPos: document.getElementById("ceSeqPos"),
+  ceSeqUp: document.getElementById("ceSeqUp"),
+  ceSeqDown: document.getElementById("ceSeqDown"),
+  ceSeqGap: document.getElementById("ceSeqGap"),
+  ceSeqGapVal: document.getElementById("ceSeqGapVal"),
 };
 
 let midi = null;
@@ -148,6 +154,25 @@ const GEST_PALETTE = ["#ff8fab", "#ffd166", "#8ec5ff", "#c792ea", "#7cffcb", "#f
 let gestures = [];                 // [{ id, name, color, threshold, template }]
 const gestureEnv = {};             // id -> 0..1 decaying trigger envelope
 const gestureCool = {};            // id -> last-fire timestamp (debounce)
+
+// Sequenced playback: when a movement drives several instruments, each one is
+// triggered on its own delayed envelope (staggered by the move's seqGap in the
+// chosen order) rather than all at once — so a movement can fire a little
+// arrangement of sounds in sequence.
+const SEQ_GAP_DEFAULT = 130;       // ms between steps of a movement's chain
+const seqEnv = {};                 // instKey -> 0..1 decaying per-instrument trigger
+const seqQueue = [];               // pending [{ instKey, at }]
+const isGestureSource = (src) => !!(PARAMS[src] && PARAMS[src].gesture);
+const gestureBySource = (src) =>
+  (src && src.slice(0, 2) === "g:") ? gestures.find((g) => g.id === src.slice(2)) : null;
+
+// Instrument keys currently driven by `source`, ordered by their play order.
+function siblingsOf(source) {
+  return INSTRUMENTS
+    .filter((i) => connections[i.key] && connections[i.key].source === source)
+    .map((i) => i.key)
+    .sort((a, b) => (connections[a].order ?? 0) - (connections[b].order ?? 0));
+}
 let recordingGesture = null;       // { name } while armed to capture a template
 let seg = null;                    // { frames: [{t,feat}] } current motion segment
 let segLastActive = 0;
@@ -379,6 +404,14 @@ function fireGesture(g, d) {
   if (now - (gestureCool[g.id] || 0) < (g.cooldown || 500)) return;
   gestureCool[g.id] = now;
   gestureEnv[g.id] = 1;
+  // Trigger each connected instrument on its own envelope, staggered by the
+  // move's spacing in play order, so the sounds fire as a sequence.
+  const gap = g.seqGap ?? SEQ_GAP_DEFAULT;
+  const chain = siblingsOf("g:" + g.id);
+  chain.forEach((instKey, i) => {
+    if (gap > 0 && i > 0) seqQueue.push({ instKey, at: now + i * gap });
+    else seqEnv[instKey] = 1;
+  });
   logEvent(`<b>GESTURE</b> ${g.name} matched · d=${d.toFixed(2)}`, "note");
   const row = els.gestureList.querySelector(`.gesture[data-id="${g.id}"]`);
   if (row) { row.classList.add("is-hit"); setTimeout(() => row.classList.remove("is-hit"), 450); }
@@ -431,6 +464,7 @@ function saveGesture(name, rawFrames) {
     color: GEST_PALETTE[gestures.length % GEST_PALETTE.length],
     threshold: GEST_THRESH_DEFAULT,
     cooldown: 500,
+    seqGap: SEQ_GAP_DEFAULT,
     raw,
     crop,
     template: makeTemplate(raw, crop),
@@ -458,7 +492,7 @@ function deleteGesture(id) {
 function serializeGestures() {
   return gestures.map((g) => ({
     id: g.id, name: g.name, color: g.color,
-    threshold: g.threshold, cooldown: g.cooldown,
+    threshold: g.threshold, cooldown: g.cooldown, seqGap: g.seqGap,
     crop: g.crop,
     raw: g.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
   }));
@@ -482,6 +516,7 @@ function gestureFromData(g) {
     color: g.color || GEST_PALETTE[0],
     threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
     cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
+    seqGap: typeof g.seqGap === "number" ? g.seqGap : SEQ_GAP_DEFAULT,
     raw, crop,
     template: makeTemplate(raw, crop),
     templates: makeTemplates(raw, crop),
@@ -755,9 +790,14 @@ INSTRUMENTS.forEach((inst) => { connections[inst.key] = null; });
 connections.bass = mkConn("roll_speed");
 connections.chimes = mkConn("tap");
 
-function shape(conn) {
+function shape(conn, instKey) {
   if (!conn) return 0;
-  const raw = paramValue(conn.source);
+  // Gesture-driven instruments read their own (possibly delayed) sequence
+  // envelope so a movement can fire its instruments in order; everything else
+  // reads the live parameter value.
+  const raw = (instKey && isGestureSource(conn.source))
+    ? (seqEnv[instKey] || 0)
+    : paramValue(conn.source);
   const t = conn.thresh;
   const gated = raw <= t ? 0 : (raw - t) / (1 - t);
   return clamp1(gated) * conn.atten;
@@ -816,6 +856,7 @@ function applySavedState(saved) {
           typeof c.atten === "number" ? clamp1(c.atten) : 1,
           typeof c.thresh === "number" ? clamp1(c.thresh) : 0
         );
+        if (typeof c.order === "number") connections[instKey].order = c.order;
       } else if (c === null) {
         connections[instKey] = null;
       }
@@ -847,7 +888,7 @@ function serializeConnections() {
   const out = {};
   for (const k in connections) {
     const c = connections[k];
-    out[k] = c ? { source: c.source, atten: c.atten, thresh: c.thresh } : null;
+    out[k] = c ? { source: c.source, atten: c.atten, thresh: c.thresh, order: c.order } : null;
   }
   return out;
 }
@@ -908,6 +949,7 @@ function applyProfile(id) {
         typeof c.atten === "number" ? clamp1(c.atten) : 1,
         typeof c.thresh === "number" ? clamp1(c.thresh) : 0
       );
+      if (typeof c.order === "number") connections[instKey].order = c.order;
       if (instKey === "chimes") audio.chimesOn = true;
     }
   }
@@ -1219,9 +1261,29 @@ function cablePath(a, b) {
 
 function connect(srcKey, instKey) {
   const prev = connections[instKey];
-  connections[instKey] = mkConn(srcKey, prev?.atten ?? 1, prev?.thresh ?? 0);
+  const conn = mkConn(srcKey, prev?.atten ?? 1, prev?.thresh ?? 0);
+  // New links join the end of their source's play chain; reconnecting the same
+  // pair keeps its position.
+  conn.order = (prev && prev.source === srcKey && typeof prev.order === "number")
+    ? prev.order
+    : siblingsOf(srcKey).filter((k) => k !== instKey).length;
+  connections[instKey] = conn;
   if (instKey === "chimes") audio.chimesOn = true;
   refreshConnectionStyles();
+  saveStateSoon();
+}
+
+// Move an instrument earlier (-1) or later (+1) in its movement's play chain.
+function moveInSequence(instKey, dir) {
+  const conn = connections[instKey];
+  if (!conn) return;
+  const sibs = siblingsOf(conn.source);
+  const idx = sibs.indexOf(instKey);
+  const j = idx + dir;
+  if (j < 0 || j >= sibs.length) return;
+  sibs.splice(idx, 1);
+  sibs.splice(j, 0, instKey);
+  sibs.forEach((k, i) => { connections[k].order = i; });
   saveStateSoon();
 }
 
@@ -1397,6 +1459,7 @@ function openEditor(instKey, clientX, clientY) {
   els.ceThresh.value = Math.round(conn.thresh * 100);
   els.ceAtten.value = Math.round(conn.atten * 100);
   updateEditorLabels();
+  updateSeqEditor();
 
   const ed = els.connEditor;
   ed.classList.remove("conn-editor--hidden");
@@ -1422,11 +1485,32 @@ function updateEditorLabels() {
   els.ceAttenVal.textContent = conn.atten.toFixed(2);
 }
 
+// Show the sequence controls only when this cable comes from a movement that
+// drives more than one instrument (i.e. there's an order worth choosing).
+function updateSeqEditor() {
+  const conn = editing && connections[editing];
+  const box = els.ceSeq;
+  const sibs = conn ? siblingsOf(conn.source) : [];
+  if (!conn || !isGestureSource(conn.source) || sibs.length < 2) {
+    box.classList.add("ce-seq--hidden");
+    return;
+  }
+  box.classList.remove("ce-seq--hidden");
+  const idx = sibs.indexOf(editing);
+  els.ceSeqPos.textContent = `step ${idx + 1} / ${sibs.length}`;
+  els.ceSeqUp.disabled = idx <= 0;
+  els.ceSeqDown.disabled = idx >= sibs.length - 1;
+  const g = gestureBySource(conn.source);
+  const gap = g ? (g.seqGap ?? SEQ_GAP_DEFAULT) : SEQ_GAP_DEFAULT;
+  els.ceSeqGap.value = gap;
+  els.ceSeqGapVal.textContent = gap;
+}
+
 function updateInstruments() {
   const svg = document.getElementById("graphSvg");
   for (const inst of INSTRUMENTS) {
     const conn = connections[inst.key];
-    const v = shape(conn);
+    const v = shape(conn, inst.key);
     if (inst.key !== "chimes") audio.setVoice(inst.key, v);
 
     // Draw / update the cable for this instrument's connection.
@@ -1462,7 +1546,7 @@ function updateInstruments() {
   if (editing && connections[editing]) {
     const conn = connections[editing];
     els.ceMeterIn.style.width = `${clamp1(paramValue(conn.source)) * 100}%`;
-    els.ceMeterOut.style.width = `${clamp1(shape(conn)) * 100}%`;
+    els.ceMeterOut.style.width = `${clamp1(shape(conn, editing)) * 100}%`;
   }
 }
 
@@ -1852,6 +1936,14 @@ async function init() {
   });
   els.ceDisconnect.addEventListener("click", () => { if (editing) disconnect(editing); });
   els.ceClose.addEventListener("click", closeEditor);
+  // Sequence controls (order within a movement's chain + step spacing).
+  els.ceSeqUp.addEventListener("click", () => { if (editing) { moveInSequence(editing, -1); updateSeqEditor(); } });
+  els.ceSeqDown.addEventListener("click", () => { if (editing) { moveInSequence(editing, +1); updateSeqEditor(); } });
+  els.ceSeqGap.addEventListener("input", () => {
+    const conn = editing && connections[editing];
+    const g = conn && gestureBySource(conn.source);
+    if (g) { g.seqGap = +els.ceSeqGap.value; els.ceSeqGapVal.textContent = g.seqGap; persistGesturesSoon(); }
+  });
   // Click anywhere outside the editor / a cable closes it.
   window.addEventListener("pointerdown", (e) => {
     if (!editing) return;
@@ -1911,6 +2003,11 @@ async function init() {
     // Gesture triggers: decay their envelopes, update the motion-activity
     // signal, then feed the segmenter (which fires a match or captures a move).
     for (const id in gestureEnv) gestureEnv[id] *= 0.85;
+    for (const k in seqEnv) seqEnv[k] *= 0.85;
+    // Release any staggered steps of a movement's chain that are now due.
+    for (let i = seqQueue.length - 1; i >= 0; i--) {
+      if (now >= seqQueue[i].at) { seqEnv[seqQueue[i].instKey] = 1; seqQueue.splice(i, 1); }
+    }
     const gfeat = featureVec();
     updateGestureActivity(now, dt, gfeat);
     handleSegment(now, gfeat);

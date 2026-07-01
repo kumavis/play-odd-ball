@@ -129,6 +129,17 @@
       <input id="ceAtten" type="range" min="0" max="100" value="100" />
     </div>
     <div class="ce-meter"><div id="ceMeterIn" class="ce-meter-in"></div><div id="ceMeterOut" class="ce-meter-out"></div></div>
+    <div id="ceSeq" class="ce-seq ce-seq--hidden">
+      <div class="ce-seq-head">sequence · <span id="ceSeqPos">step 1 / 1</span></div>
+      <div class="ce-seq-order">
+        <button id="ceSeqUp" class="ce-seq-btn" title="Play earlier">◀ earlier</button>
+        <button id="ceSeqDown" class="ce-seq-btn" title="Play later">later ▶</button>
+      </div>
+      <div class="ce-row">
+        <label>spacing <span id="ceSeqGapVal" class="ce-num">130</span> ms</label>
+        <input id="ceSeqGap" type="range" min="0" max="600" step="10" value="130" />
+      </div>
+    </div>
     <button id="ceDisconnect" class="ce-disconnect">Disconnect</button>
   </div>
 
@@ -168,7 +179,7 @@
     <p><strong>Web MIDI permission needed.</strong> Use Chrome or Edge, pick the <code>ODD 1 Bluetooth</code> port above, then bounce / shake / spin the ball.</p>
   </div>
 
-  <script src="synth.js?v=14"></script>
-  <script src="app.js?v=14"></script>
+  <script src="synth.js?v=15"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
