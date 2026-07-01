@@ -2365,7 +2365,10 @@ async function connectBluetoothBall() {
     const char = await service.getCharacteristic(BLE_MIDI_CHAR);
     const port = { id, name: device.name || "ODD Ball (BLE)", device };
     char.addEventListener("characteristicvaluechanged", (ev) => {
-      const bytes = new Uint8Array(ev.target.value.buffer);
+      // The characteristic value is a DataView that need not span its whole
+      // ArrayBuffer — honor its offset/length or the packet bytes are wrong.
+      const v = ev.target.value;
+      const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
       for (const msg of decodeBleMidi(bytes)) onMidiMessage({ data: msg, target: port });
     });
     device.addEventListener("gattserverdisconnected", () => removeBleInput(id));
