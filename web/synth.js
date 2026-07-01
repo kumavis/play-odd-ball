@@ -32,6 +32,7 @@ class AudioEngine {
       { key: "bass", label: "Alien bass" },
       { key: "engine", label: "Revving engine" },
       { key: "thunder", label: "Thunderstorm" },
+      { key: "lightning", label: "Lightning strike" },
       { key: "rain", label: "Rainfall" },
       { key: "theremin", label: "Theremin" },
       { key: "choir", label: "Ghost choir" },
@@ -85,6 +86,7 @@ class AudioEngine {
     this.voices.bass = this._buildBass();
     this.voices.engine = this._buildEngine();
     this.voices.thunder = this._buildThunder();
+    this.voices.lightning = this._buildLightning();
     this.voices.rain = this._buildRain();
     this.voices.theremin = this._buildTheremin();
     this.voices.choir = this._buildChoir();
@@ -433,6 +435,69 @@ class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0001, t + 2.5);
     src.start(t); src.stop(t + 2.6);
     setTimeout(() => g.disconnect(), 2800);
+  }
+
+  // ---- Lightning strike -------------------------------------------------
+  // An event voice: each trigger is a single bolt — a bright crackling flicker
+  // and a distorted electric snap, followed by a rolling thunder tail. Higher
+  // value = louder, more frequent strikes.
+  _buildLightning() {
+    const out = this._out(); out.gain.value = 1;
+    const voice = { out, level: 0, last: 0 };
+    voice.set = (v) => { if (this._due(voice, v, 340, 2600)) this._lightningStrike(out, v); };
+    return voice;
+  }
+
+  _lightningStrike(dest, v) {
+    const ctx = this.ctx, t = ctx.currentTime;
+    const level = 0.28 + v * 0.5;
+
+    // 1) Bright crackle: a few rapid highpassed noise spikes (the flicker).
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2600;
+    const crackGain = ctx.createGain(); crackGain.gain.value = 0;
+    const noise = ctx.createBufferSource(); noise.buffer = this._noiseBuffer(0.6);
+    noise.connect(hp).connect(crackGain).connect(dest); noise.start(t);
+    crackGain.gain.setValueAtTime(0, t);
+    const flickers = 2 + Math.floor(Math.random() * 3);
+    let ct = t;
+    for (let i = 0; i < flickers; i++) {
+      const st = t + i * (0.02 + Math.random() * 0.05);
+      const amp = level * (1 - i * 0.18);
+      crackGain.gain.setValueAtTime(0.0001, st);
+      crackGain.gain.linearRampToValueAtTime(amp, st + 0.002);
+      crackGain.gain.exponentialRampToValueAtTime(0.0001, st + 0.05 + Math.random() * 0.06);
+      ct = st + 0.12;
+    }
+    noise.stop(ct + 0.3);
+
+    // 2) Electric snap: a distorted saw sweeping sharply downward.
+    const o = ctx.createOscillator(); o.type = "sawtooth";
+    o.frequency.setValueAtTime(3000 + Math.random() * 2200, t);
+    o.frequency.exponentialRampToValueAtTime(180, t + 0.26);
+    const shaper = ctx.createWaveShaper(); shaper.curve = this._shaper(10);
+    const og = ctx.createGain(); og.gain.value = 0;
+    o.connect(shaper).connect(og).connect(dest);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.linearRampToValueAtTime(level * 0.4, t + 0.004);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.start(t); o.stop(t + 0.32);
+
+    // 3) Rolling thunder tail: lowpassed noise sweeping down, with a second swell.
+    const rt = t + 0.05 + Math.random() * 0.15;
+    const rumble = ctx.createBufferSource(); rumble.buffer = this._noiseBuffer(2.2);
+    const rlp = ctx.createBiquadFilter(); rlp.type = "lowpass"; rlp.Q.value = 1.2;
+    rlp.frequency.setValueAtTime(420, rt);
+    rlp.frequency.exponentialRampToValueAtTime(70, rt + 1.8);
+    const rg = ctx.createGain(); rg.gain.value = 0;
+    rumble.connect(rlp).connect(rg).connect(dest);
+    rg.gain.setValueAtTime(0, rt);
+    rg.gain.linearRampToValueAtTime(level * 0.5, rt + 0.06);
+    rg.gain.exponentialRampToValueAtTime(level * 0.2, rt + 0.6);
+    rg.gain.linearRampToValueAtTime(level * 0.34, rt + 0.95);
+    rg.gain.exponentialRampToValueAtTime(0.0001, rt + 1.9);
+    rumble.start(rt); rumble.stop(rt + 2.1);
+
+    setTimeout(() => { crackGain.disconnect(); og.disconnect(); rg.disconnect(); }, 2700);
   }
 
   // ---- Rainfall (gentle) ------------------------------------------------
