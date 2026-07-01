@@ -272,6 +272,11 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .gesture.is-hit { border-color: var(--accent); box-shadow: 0 0 16px rgba(0,229,255,0.6); }
 .g-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
 .g-name { font-size: 13px; font-weight: 600; color: var(--text); flex: 0 0 auto; min-width: 90px; }
+.g-ex {
+  font-size: 10px; font-weight: 700; color: var(--muted); flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
+}
 .g-dist { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; width: 66px; }
 .g-sens-label { font-size: 11px; color: var(--muted); margin-left: auto; }
 .g-sens { width: 130px; accent-color: var(--accent); }
@@ -359,6 +364,22 @@ body { display: flex; flex-direction: column; height: 100vh; }
   border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer;
 }
 .gedit-mini:hover { background: #232743; }
+.gedit-mini:disabled { opacity: 0.4; cursor: default; }
+.gedit-mini--danger:hover { color: var(--warn); border-color: var(--warn); }
+.gedit-mini.is-arming { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 12px rgba(0,229,255,0.4); }
+
+/* ---- Gesture editor: example strip ---- */
+.gedit-examples { display: flex; align-items: center; gap: 8px; }
+.gedit-ex-title { font-size: 12px; color: var(--muted); flex: 0 0 auto; }
+.gedit-ex-strip { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.gedit-ex-strip:empty::before { content: "none"; font-size: 12px; color: var(--muted); }
+.gedit-ex {
+  min-width: 26px; height: 26px; padding: 0 7px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted);
+  font-size: 12px; font-weight: 600; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.gedit-ex:hover { color: var(--text); border-color: var(--accent-2); }
+.gedit-ex.is-active { color: #061018; background: var(--accent-2); border-color: var(--accent-2); }
 .gedit-row { display: flex; align-items: center; gap: 12px; }
 .gedit-row label { font-size: 13px; color: var(--muted); width: 150px; flex: 0 0 auto; }
 .gedit-row input[type="range"] { flex: 1 1 auto; accent-color: var(--accent-2); }

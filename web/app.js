@@ -44,6 +44,9 @@ const els = {
   geName: document.getElementById("geName"),
   geClose: document.getElementById("geClose"),
   geCanvas: document.getElementById("geCanvas"),
+  geExStrip: document.getElementById("geExStrip"),
+  geAddExample: document.getElementById("geAddExample"),
+  geDelExample: document.getElementById("geDelExample"),
   geCropInfo: document.getElementById("geCropInfo"),
   geAutoTrim: document.getElementById("geAutoTrim"),
   geCropReset: document.getElementById("geCropReset"),
@@ -244,7 +247,7 @@ function fireChain(source, gap) {
     else seqEnv[instKey] = 1;
   });
 }
-let recordingGesture = null;       // { name } while armed to capture a template
+let recordingGesture = null;       // { name, targetId, examples[] } while armed to capture
 let seg = null;                    // { frames: [{t,feat}] } current motion segment
 let segLastActive = 0;
 let gestActivity = 0;              // smoothed Σ|Δfeat|/s
@@ -288,6 +291,50 @@ function activeRegion(frames) {
   if (firstT === null) return frames.map((f) => f.feat);
   const lo = firstT - SEG_PREROLL, hi = lastT + 120;
   return frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
+}
+
+// Split a recorded session into EVERY distinct move it contains, using the same
+// activity thresholds as the live segmenter — so recording the move several
+// times (with a pause between reps) yields one example per rep. Returns a list
+// of feat-row arrays. Falls back to the single active region when it can't find
+// clean bursts, so a lone continuous move still imports.
+function activeRegions(frames) {
+  const n = frames.length;
+  if (n < 6) return [];
+  // Smoothed per-frame activity (framerate-independent), mirroring the live path.
+  const act = new Array(n).fill(0);
+  let ema = 0;
+  for (let i = 0; i < n; i++) {
+    const dt = i ? Math.max(0.001, (frames[i].t - frames[i - 1].t) / 1000) : 0.05;
+    let speed = 0;
+    if (i) { let s = 0; for (let d = 0; d < frames[i].feat.length; d++) s += Math.abs(frames[i].feat[d] - frames[i - 1].feat[d]); speed = s / dt; }
+    ema += (speed - ema) * (1 - Math.exp(-dt / GEST_ACT_TAU));
+    act[i] = ema;
+  }
+  const regions = [];
+  let i = 0;
+  while (i < n) {
+    if (act[i] <= SEG_START) { i++; continue; }
+    const startT = frames[i].t;
+    let lastActive = frames[i].t, peak = act[i], j = i;
+    for (; j < n; j++) {
+      if (act[j] > SEG_END) lastActive = frames[j].t;
+      if (act[j] > peak) peak = act[j];
+      if (frames[j].t - lastActive > SEG_HOLD || frames[j].t - startT > SEG_MAX) break;
+    }
+    const lo = startT - SEG_PREROLL, hi = lastActive + 120;
+    const rows = frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
+    const durMs = lastActive - startT;
+    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) regions.push(rows);
+    // Advance past the rest of this burst before scanning for the next start.
+    i = j + 1;
+    while (i < n && act[i] > SEG_END) i++;
+  }
+  if (!regions.length) {
+    const one = activeRegion(frames);
+    if (one.length >= 6) regions.push(one);
+  }
+  return regions;
 }
 
 // Linear-resample a variable-length list of feature rows to exactly N rows.
@@ -338,31 +385,49 @@ function normalizeShared(rows) {
 
 const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
 
-// A gesture keeps its raw 0..1 capture (resampled to RAW_N so storage is
-// bounded) plus a crop window; the DTW template is derived from the cropped
-// region. This lets a saved move be re-cropped and re-tuned after the fact.
+// A move is built from one or more EXAMPLES — real captures of the performance.
+// Each example keeps its raw 0..1 capture (resampled to RAW_N so storage is
+// bounded) plus its own crop window; a DTW template is derived from the cropped
+// region. Storing several real examples (repeat the move, or crop several reps
+// out of one recording) makes matching far more robust than re-cropping a single
+// take, because it captures the genuine run-to-run variation of the gesture.
+function makeExample(rawFrames) {
+  const raw = resample(rawFrames, RAW_N);
+  return { raw, crop: autoTrim(raw) };
+}
+
+// Coerce whatever is stored on a gesture into a clean, non-empty examples list.
+function gestureExamples(g) {
+  return (g && Array.isArray(g.examples) && g.examples.length) ? g.examples : [];
+}
+
 function makeTemplate(raw, crop) {
   const a = raw.slice(crop.start, crop.end + 1);
   return resampleNorm(a.length >= 2 ? a : raw, GEST_N);
 }
 
-// Build SEVERAL DTW templates for one move by cropping the capture a few
-// different ways around the primary crop: as-cropped, looser (more silence
-// on both ends), tighter (core only), and shifted to keep more head or tail.
-// Recognition then takes the best (minimum) distance across all of them, so a
-// performance with slightly more/less lead-in or follow-through than the
-// original still registers as the same move. Derived from `raw`, so nothing
-// extra is stored — they're rebuilt on load and whenever the crop is edited.
-function makeTemplates(raw, crop) {
+// Build SEVERAL DTW templates for ONE example by cropping the capture a few
+// different ways around its crop: as-cropped, looser (more silence on both
+// ends), tighter (core only), and — when `wide` — shifted to keep more head or
+// tail. Recognition takes the best (minimum) distance across every template, so
+// a performance with slightly more/less lead-in or follow-through still
+// registers. When a move has several real examples the extra head/tail windows
+// add little (the real reps already span that variation), so `wide` is dropped
+// to keep the template count — and the per-match cost — bounded.
+function makeTemplates(raw, crop, wide = true) {
   const n = raw.length;
   const span = Math.max(2, crop.end - crop.start);
   const p = (f) => Math.round(span * f);
-  const windows = [
+  const windows = wide ? [
     [crop.start, crop.end],                        // as cropped
     [crop.start - p(0.22), crop.end + p(0.22)],    // looser (keep more silence)
     [crop.start + p(0.15), crop.end - p(0.15)],    // tighter (core only)
     [crop.start, crop.end + p(0.35)],              // keep more follow-through
     [crop.start - p(0.35), crop.end],              // keep more wind-up
+  ] : [
+    [crop.start, crop.end],                        // as cropped
+    [crop.start - p(0.22), crop.end + p(0.22)],    // looser
+    [crop.start + p(0.15), crop.end - p(0.15)],    // tighter
   ];
   const out = [];
   const seen = new Set();
@@ -373,6 +438,19 @@ function makeTemplates(raw, crop) {
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(resampleNorm(raw.slice(s, e + 1), GEST_N));
+  }
+  return out;
+}
+
+// The full template set for a move: the crop-variant templates of EVERY example
+// pooled together. With multiple examples we lean on the real captures for
+// robustness and take just the tighter variants of each (see makeTemplates).
+function buildTemplates(examples) {
+  const wide = examples.length <= 1;
+  const out = [];
+  for (const ex of examples) {
+    if (!ex || !Array.isArray(ex.raw) || ex.raw.length < 2) continue;
+    for (const t of makeTemplates(ex.raw, ex.crop, wide)) out.push(t);
   }
   return out;
 }
@@ -478,9 +556,13 @@ function handleSegment(now, feat) {
 
 function processSegment(frames) {
   if (recordingGesture) {
-    saveGesture(recordingGesture.name, frames);   // frames are raw 0..1 rows
-    recordingGesture = null;
+    // Each completed burst is one example. We keep capturing until the user
+    // clicks to finish, so one recording session can gather several reps that
+    // together build a more reliable trigger.
+    recordingGesture.examples.push(frames);   // frames are raw 0..1 rows
     updateRecMoveBtn();
+    if (recordingGesture.targetId) updateExampleAddBtn();
+    logEvent(`<b>GESTURE</b> captured example ${recordingGesture.examples.length} — repeat or finish`, "note");
   } else {
     recognize(resampleNorm(frames, GEST_N));
   }
@@ -548,9 +630,20 @@ function unregisterGestureParam(id) {
   }
 }
 
-function saveGesture(name, rawFrames) {
-  const raw = resample(rawFrames, RAW_N);
-  const crop = autoTrim(raw);   // cut the silent lead-in / tail-out on record
+// Recompute a gesture's derived templates from its current examples (called
+// after adding, deleting, or re-cropping an example).
+function refreshGestureTemplates(g) {
+  const exs = gestureExamples(g);
+  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
+  g.templates = buildTemplates(exs);
+}
+
+// Create a move from one or more example captures (each a list of raw 0..1
+// feature rows). Passing several examples — repeated live or cropped out of one
+// recording — builds a more robust trigger than a single take.
+function saveGesture(name, exampleFrames) {
+  const examples = (Array.isArray(exampleFrames[0]?.[0]) ? exampleFrames : [exampleFrames])
+    .map(makeExample);
   const g = {
     id: "g" + Date.now().toString(36),
     name: name || `Move ${gestures.length + 1}`,
@@ -558,18 +651,25 @@ function saveGesture(name, rawFrames) {
     threshold: GEST_THRESH_DEFAULT,
     cooldown: 500,
     seqGap: SEQ_GAP_DEFAULT,
-    raw,
-    crop,
-    template: makeTemplate(raw, crop),
-    templates: makeTemplates(raw, crop),
+    examples,
   };
+  refreshGestureTemplates(g);
   gestures.push(g);
   registerGestureParam(g);
   persistGestures();
   rebuildGraph();
   renderGestures();
-  logEvent(`<b>GESTURE</b> saved “${g.name}” — edit or wire it up in the patch bay`, "note");
+  const n = examples.length;
+  logEvent(`<b>GESTURE</b> saved “${g.name}”${n > 1 ? ` · ${n} examples` : ""} — edit or wire it up`, "note");
   return g;
+}
+
+// Append example captures (lists of raw rows) to an existing move and rebuild.
+function addExamplesToGesture(g, exampleFrames) {
+  for (const frames of exampleFrames) g.examples.push(makeExample(frames));
+  refreshGestureTemplates(g);
+  persistGestures();
+  renderGestures();
 }
 
 function deleteGesture(id) {
@@ -586,34 +686,53 @@ function serializeGestures() {
   return gestures.map((g) => ({
     id: g.id, name: g.name, color: g.color,
     threshold: g.threshold, cooldown: g.cooldown, seqGap: g.seqGap,
-    crop: g.crop,
-    raw: g.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
+    examples: gestureExamples(g).map((ex) => ({
+      crop: ex.crop,
+      raw: ex.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
+    })),
   }));
 }
 
-// Rebuild a full gesture (with a computed template) from stored/profile data.
-// Returns null for anything malformed so bad entries can never break the graph.
-function gestureFromData(g) {
-  if (!g) return null;
-  // New format stores raw + crop; migrate the old template-only format by
-  // treating the stored template as the raw capture.
-  let raw = Array.isArray(g.raw) ? g.raw : (Array.isArray(g.template) ? g.template : null);
+// Rebuild one example ({ raw resampled to RAW_N, clamped crop }) from stored
+// data. Returns null for anything malformed so a bad entry can't break the move.
+function exampleFromData(e) {
+  let raw = e && Array.isArray(e.raw) ? e.raw : null;
   if (!raw || !raw.length || !Array.isArray(raw[0])) return null;
   raw = resample(raw, RAW_N);
-  let crop = g.crop && typeof g.crop.start === "number" && typeof g.crop.end === "number"
-    ? { start: Math.max(0, Math.min(RAW_N - 1, g.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, g.crop.end)) }
+  let crop = e.crop && typeof e.crop.start === "number" && typeof e.crop.end === "number"
+    ? { start: Math.max(0, Math.min(RAW_N - 1, e.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, e.crop.end)) }
     : { start: 0, end: RAW_N - 1 };
   if (crop.end <= crop.start) crop = { start: 0, end: RAW_N - 1 };
-  return {
+  return { raw, crop };
+}
+
+// Rebuild a full gesture (with computed templates) from stored/profile data.
+// Returns null for anything malformed so bad entries can never break the graph.
+// Understands three formats: the current `examples` array, the previous single
+// `raw` + `crop`, and the oldest template-only capture.
+function gestureFromData(g) {
+  if (!g) return null;
+  let examples;
+  if (Array.isArray(g.examples)) {
+    examples = g.examples.map(exampleFromData).filter(Boolean);
+  } else {
+    // Legacy single-example: raw+crop, or the oldest format that only kept the
+    // template (treat it as the raw capture).
+    const raw = Array.isArray(g.raw) ? g.raw : (Array.isArray(g.template) ? g.template : null);
+    const one = exampleFromData({ raw, crop: g.crop });
+    examples = one ? [one] : [];
+  }
+  if (!examples.length) return null;
+  const out = {
     id: g.id, name: g.name || "Move",
     color: g.color || GEST_PALETTE[0],
     threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
     cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
     seqGap: typeof g.seqGap === "number" ? g.seqGap : SEQ_GAP_DEFAULT,
-    raw, crop,
-    template: makeTemplate(raw, crop),
-    templates: makeTemplates(raw, crop),
+    examples,
   };
+  refreshGestureTemplates(out);
+  return out;
 }
 
 function persistGestures() {
@@ -632,18 +751,51 @@ function loadGestures() {
 
 // ---- Gesture + session recording UI -------------------------------------
 function updateRecMoveBtn() {
-  const arming = !!recordingGesture;
-  els.recMove.classList.toggle("is-arming", arming);
-  els.recMove.textContent = arming ? "✋ Do the move…" : "✋ Record move";
+  const rec = recordingGesture;
+  els.recMove.classList.toggle("is-arming", !!rec);
+  if (!rec) { els.recMove.textContent = "✋ Record move"; return; }
+  const n = rec.examples.length;
+  els.recMove.textContent = n
+    ? `✋ ${n} captured · finish`
+    : (rec.targetId ? "✋ Do the move…" : "✋ Do the move…");
 }
 
 function toggleRecordMove() {
-  if (recordingGesture) { recordingGesture = null; updateRecMoveBtn(); return; }
-  const name = (window.prompt("Name this move, then perform it once:", `Move ${gestures.length + 1}`) || "").trim();
+  if (recordingGesture) { finishRecordMove(); return; }
+  const name = (window.prompt(
+    "Name this move, then perform it. Repeat it a few times (pause between reps) to build a more reliable trigger, then click ✋ again to finish.",
+    `Move ${gestures.length + 1}`) || "").trim();
   if (!name) return;
-  recordingGesture = { name };
-  seg = null; // start fresh; the next burst of motion becomes the template
+  recordingGesture = { name, targetId: null, examples: [] };
+  seg = null; // start fresh; the next bursts of motion become the examples
   updateRecMoveBtn();
+}
+
+// Finish an armed recording: build a new move from the captured examples, or —
+// if it was reinforcing an existing move — append them to it.
+function finishRecordMove() {
+  const rec = recordingGesture;
+  recordingGesture = null;
+  updateRecMoveBtn();
+  updateExampleAddBtn();
+  if (!rec || !rec.examples.length) {
+    if (rec) logEvent("<b>GESTURE</b> recording cancelled — no move captured", "note");
+    return;
+  }
+  if (rec.targetId) {
+    const g = gestures.find((x) => x.id === rec.targetId);
+    if (!g) { saveGesture(rec.name, rec.examples); return; }
+    addExamplesToGesture(g, rec.examples);
+    logEvent(`<b>GESTURE</b> added ${rec.examples.length} example${rec.examples.length === 1 ? "" : "s"} to “${g.name}” · ${gestureExamples(g).length} total`, "note");
+    if (editingGesture && editingGesture.id === g.id) {
+      editingExample = gestureExamples(g).length - 1;
+      renderExampleStrip();
+      updateEditorSettingLabels();
+      drawGestureEditor();
+    }
+  } else {
+    saveGesture(rec.name, rec.examples);
+  }
 }
 
 // Turn a recorded session JSON (from the Record button) into a gesture template.
@@ -663,12 +815,17 @@ function importSessionFile(file) {
       t: s.t || 0,
       feat: GEST_DIM_KEYS.map((k) => { const v = s.values && s.values[k]; return typeof v === "number" ? v : 0; }),
     }));
-    const active = activeRegion(frames);
-    if (active.length < 6) { logEvent("<b>IMPORT</b> couldn't find a move in that recording", "note"); return; }
+    // Pull out every rep in the recording; each becomes an example of one move.
+    const regions = activeRegions(frames);
+    if (!regions.length) { logEvent("<b>IMPORT</b> couldn't find a move in that recording", "note"); return; }
     const suggested = (file.name || "Imported move").replace(/\.json$/i, "").replace(/^oddball-session-.*$/, "Imported move");
-    const name = (window.prompt("Name this imported move:", suggested) || "").trim();
+    const name = (window.prompt(
+      regions.length > 1
+        ? `Found ${regions.length} performances — they'll build one trigger. Name this move:`
+        : "Name this imported move:",
+      suggested) || "").trim();
     if (!name) return;
-    saveGesture(name, active);   // raw 0..1 rows
+    saveGesture(name, regions);   // list of raw-row examples
   };
   reader.readAsText(file);
 }
@@ -676,9 +833,11 @@ function importSessionFile(file) {
 function renderGestures() {
   els.gestureList.innerHTML = gestures.map((g) => {
     const dist = typeof g._dist === "number" ? g._dist.toFixed(2) : "—";
+    const nEx = gestureExamples(g).length;
     return `<div class="gesture" data-id="${g.id}">
       <span class="g-dot" style="background:${g.color}"></span>
       <span class="g-name">${g.name}</span>
+      <span class="g-ex" title="${nEx} example${nEx === 1 ? "" : "s"} building this trigger">${nEx}×</span>
       <span class="g-dist">d ${dist}</span>
       <span class="g-sens-label">sensitivity</span>
       <input class="g-sens" type="range" min="0" max="100" value="${threshToSens(g.threshold)}" data-id="${g.id}" />
@@ -691,8 +850,17 @@ function renderGestures() {
 // ---- Gesture editor: crop out silence + tune per-move settings -----------
 const GEST_DIM_COLORS = GEST_DIM_KEYS.map((k) => (PARAMS[k] && PARAMS[k].color) || "#8b90b8");
 let editingGesture = null;   // the gesture object currently open in the editor
+let editingExample = 0;      // index of the example shown in the editor canvas
 let geDrag = null;           // "start" | "end" while dragging a crop handle
 let gPersistTimer = null;
+
+// The example currently shown/edited in the gesture editor.
+function currentExample() {
+  const exs = editingGesture ? gestureExamples(editingGesture) : [];
+  if (!exs.length) return null;
+  editingExample = Math.max(0, Math.min(exs.length - 1, editingExample));
+  return exs[editingExample];
+}
 
 function persistGesturesSoon() {
   clearTimeout(gPersistTimer);
@@ -703,10 +871,13 @@ function openGestureEditor(id) {
   const g = gestures.find((x) => x.id === id);
   if (!g) return;
   editingGesture = g;
+  editingExample = 0;
   els.geDot.style.background = g.color;
   els.geName.value = g.name;
   els.geSens.value = threshToSens(g.threshold);
   els.geCool.value = g.cooldown || 500;
+  renderExampleStrip();
+  updateExampleAddBtn();
   updateEditorSettingLabels();
   els.gestureEditor.classList.remove("gedit--hidden");
   els.gestureBackdrop.classList.remove("gedit-backdrop--hidden");
@@ -714,10 +885,62 @@ function openGestureEditor(id) {
 }
 
 function closeGestureEditor() {
+  // Stop an in-progress "add example" capture tied to this editor.
+  if (recordingGesture && recordingGesture.targetId) finishRecordMove();
   editingGesture = null;
   geDrag = null;
   els.gestureEditor.classList.add("gedit--hidden");
   els.gestureBackdrop.classList.add("gedit-backdrop--hidden");
+}
+
+// Render the row of example chips (one per captured rep). The selected chip
+// drives the crop canvas; each chip can be picked, and the strip shows the count.
+function renderExampleStrip() {
+  const g = editingGesture;
+  if (!g) return;
+  const exs = gestureExamples(g);
+  els.geExStrip.innerHTML = exs.map((ex, i) =>
+    `<button class="gedit-ex${i === editingExample ? " is-active" : ""}" data-ex="${i}">${i + 1}</button>`
+  ).join("");
+  els.geDelExample.disabled = exs.length <= 1;
+}
+
+// Reflect the add-example capture state on the editor's ＋ button.
+function updateExampleAddBtn() {
+  const g = editingGesture;
+  if (!g || !els.geAddExample) return;
+  const capturing = !!(recordingGesture && recordingGesture.targetId === g.id);
+  els.geAddExample.classList.toggle("is-arming", capturing);
+  els.geAddExample.textContent = capturing
+    ? (recordingGesture.examples.length ? `✋ ${recordingGesture.examples.length} · finish` : "✋ Do the move…")
+    : "＋ Add";
+}
+
+// Arm (or finish) capturing extra examples for the move being edited: perform
+// the move — repeat it — and each burst appends as a new example on finish.
+function toggleAddExample() {
+  const g = editingGesture;
+  if (!g) return;
+  if (recordingGesture) { finishRecordMove(); return; }
+  recordingGesture = { name: g.name, targetId: g.id, examples: [] };
+  seg = null;
+  updateRecMoveBtn();
+  updateExampleAddBtn();
+}
+
+// Remove the selected example (never the last one) and rebuild the templates.
+function deleteEditingExample() {
+  const g = editingGesture;
+  if (!g) return;
+  const exs = gestureExamples(g);
+  if (exs.length <= 1) return;
+  exs.splice(editingExample, 1);
+  editingExample = Math.max(0, Math.min(exs.length - 1, editingExample));
+  refreshGestureTemplates(g);
+  persistGesturesSoon();
+  renderExampleStrip();
+  updateEditorSettingLabels();
+  drawGestureEditor();
 }
 
 function updateEditorSettingLabels() {
@@ -726,15 +949,19 @@ function updateEditorSettingLabels() {
   els.geSensVal.textContent = threshToSens(g.threshold);
   els.geCoolVal.textContent = `${Math.round(g.cooldown || 500)} ms`;
   els.geThreshShow.textContent = g.threshold.toFixed(2);
-  const span = g.crop.end - g.crop.start + 1;
-  els.geCropInfo.textContent = `crop ${g.crop.start}–${g.crop.end} of ${RAW_N} (${Math.round((span / RAW_N) * 100)}%)`;
+  const ex = currentExample();
+  const exs = gestureExamples(g);
+  if (ex) {
+    const span = ex.crop.end - ex.crop.start + 1;
+    const which = exs.length > 1 ? `ex ${editingExample + 1}/${exs.length} · ` : "";
+    els.geCropInfo.textContent = `${which}crop ${ex.crop.start}–${ex.crop.end} of ${RAW_N} (${Math.round((span / RAW_N) * 100)}%)`;
+  }
 }
 
 function recomputeEditingTemplate() {
   const g = editingGesture;
   if (!g) return;
-  g.template = makeTemplate(g.raw, g.crop);
-  g.templates = makeTemplates(g.raw, g.crop);
+  refreshGestureTemplates(g);
   updateEditorSettingLabels();
   persistGesturesSoon();
 }
@@ -742,6 +969,8 @@ function recomputeEditingTemplate() {
 function drawGestureEditor() {
   const g = editingGesture;
   if (!g) return;
+  const ex = currentExample();
+  if (!ex) return;
   const cv = els.geCanvas;
   const dpr = window.devicePixelRatio || 1;
   const cw = cv.clientWidth, ch = cv.clientHeight;
@@ -753,7 +982,7 @@ function drawGestureEditor() {
   const W = cv.width, H = cv.height, pad = 8 * dpr;
   ctx.clearRect(0, 0, W, H);
 
-  const raw = g.raw, N = raw.length, D = raw[0].length;
+  const raw = ex.raw, crop = ex.crop, N = raw.length, D = raw[0].length;
   let mn = Infinity, mx = -Infinity;
   for (let i = 0; i < N; i++) for (let d = 0; d < D; d++) { const v = raw[i][d]; if (v < mn) mn = v; if (v > mx) mx = v; }
   const range = mx - mn || 1;
@@ -761,7 +990,7 @@ function drawGestureEditor() {
   const yOf = (v) => H - pad - ((v - mn) / range) * (H - pad * 2);
 
   // Excluded (cropped-out) regions dimmed.
-  const xs = xOf(g.crop.start), xe = xOf(g.crop.end);
+  const xs = xOf(crop.start), xe = xOf(crop.end);
   ctx.fillStyle = "rgba(4,6,14,0.62)";
   ctx.fillRect(0, 0, xs, H);
   ctx.fillRect(xe, 0, W - xe, H);
@@ -799,11 +1028,12 @@ function editorIndexFromEvent(e) {
 
 function onEditorPointerDown(e) {
   if (!editingGesture) return;
+  const ex = currentExample();
+  if (!ex) return;
   const r = els.geCanvas.getBoundingClientRect();
-  const g = editingGesture;
   const px = (i) => (i / (RAW_N - 1)) * r.width;
   const x = e.clientX - r.left;
-  const dStart = Math.abs(x - px(g.crop.start)), dEnd = Math.abs(x - px(g.crop.end));
+  const dStart = Math.abs(x - px(ex.crop.start)), dEnd = Math.abs(x - px(ex.crop.end));
   geDrag = dStart <= dEnd ? "start" : "end";
   els.geCanvas.setPointerCapture(e.pointerId);
   onEditorPointerMove(e);
@@ -811,12 +1041,14 @@ function onEditorPointerDown(e) {
 
 function onEditorPointerMove(e) {
   if (!editingGesture || !geDrag) return;
-  const g = editingGesture;
+  const ex = currentExample();
+  if (!ex) return;
+  const crop = ex.crop;
   let idx = editorIndexFromEvent(e);
-  if (geDrag === "start") g.crop.start = Math.min(idx, g.crop.end - 2);
-  else g.crop.end = Math.max(idx, g.crop.start + 2);
-  g.crop.start = Math.max(0, g.crop.start);
-  g.crop.end = Math.min(RAW_N - 1, g.crop.end);
+  if (geDrag === "start") crop.start = Math.min(idx, crop.end - 2);
+  else crop.end = Math.max(idx, crop.start + 2);
+  crop.start = Math.max(0, crop.start);
+  crop.end = Math.min(RAW_N - 1, crop.end);
   recomputeEditingTemplate();
   drawGestureEditor();
 }
@@ -2101,15 +2333,28 @@ async function init() {
     updateEditorSettingLabels(); persistGesturesSoon();
   });
   els.geAutoTrim.addEventListener("click", () => {
-    if (!editingGesture) return;
-    editingGesture.crop = autoTrim(editingGesture.raw);
+    const ex = currentExample();
+    if (!ex) return;
+    ex.crop = autoTrim(ex.raw);
     recomputeEditingTemplate(); drawGestureEditor();
   });
   els.geCropReset.addEventListener("click", () => {
-    if (!editingGesture) return;
-    editingGesture.crop = { start: 0, end: RAW_N - 1 };
+    const ex = currentExample();
+    if (!ex) return;
+    ex.crop = { start: 0, end: RAW_N - 1 };
     recomputeEditingTemplate(); drawGestureEditor();
   });
+  // Example strip: pick which captured rep to view/crop.
+  els.geExStrip.addEventListener("click", (e) => {
+    const chip = e.target.closest(".gedit-ex");
+    if (!chip) return;
+    editingExample = +chip.dataset.ex || 0;
+    renderExampleStrip();
+    updateEditorSettingLabels();
+    drawGestureEditor();
+  });
+  els.geAddExample.addEventListener("click", toggleAddExample);
+  els.geDelExample.addEventListener("click", deleteEditingExample);
   els.geDelete.addEventListener("click", () => {
     if (!editingGesture) return;
     const id = editingGesture.id;
