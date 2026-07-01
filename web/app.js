@@ -56,7 +56,12 @@ let lastMotion = 0;
 // units/sec even when still, active rolling is ~900-1300/sec — so we gate above
 // the idle floor and only make sound when it's really rolling.
 const ROLL_CHANNELS = new Set([4, 5, 6]);
-const prevCc = {};
+// Per-device CC state, keyed by MIDIInput id. When several controllers are
+// bound at once we must NOT let their streams overwrite one shared slot —
+// that makes cross-device value jumps look like huge orientation deltas and
+// pegs the roll rate. Instead we keep each device's values separate and merge
+// them (average) into the shared `cc` used by the parameters.
+const deviceCc = {};
 let rollAccum = 0;
 let rollRate = 0;      // smoothed CC-units/sec on channels 4-6
 let rollSpeed = 0;     // final gated 0..1 intensity sent to the synth
@@ -797,17 +802,31 @@ function onMidiMessage(e) {
   } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {  // note off
     // (Quiet in the log to avoid clutter.)
   } else if (type === 0xb0) {               // control change
-    if (prevCc[d1] !== undefined && ROLL_CHANNELS.has(d1)) {
-      rollAccum += Math.abs(d2 - prevCc[d1]);
+    const id = (e.target && e.target.id) || "_";
+    const dev = deviceCc[id] || (deviceCc[id] = {});
+    // Roll delta is measured within a single device only.
+    if (dev[d1] !== undefined && ROLL_CHANNELS.has(d1)) {
+      rollAccum += Math.abs(d2 - dev[d1]);
     }
-    prevCc[d1] = d2;
-    cc[d1] = d2;
+    dev[d1] = d2;
+    // Merge this controller across all bound devices for the shared value.
+    cc[d1] = aggregateCc(d1);
     const row = ensureCcRow(d1);
-    row.fill.style.width = `${(d2 / 127) * 100}%`;
-    row.val.textContent = d2;
+    row.fill.style.width = `${(cc[d1] / 127) * 100}%`;
+    row.val.textContent = Math.round(cc[d1]);
   } else if (type === 0xe0) {               // pitch bend
     logEvent(`<b>PITCH</b> ${((d2 << 7) | d1) - 8192}`);
   }
+}
+
+// Average a controller's value across every device that has reported it.
+function aggregateCc(ctrl) {
+  let sum = 0, n = 0;
+  for (const id in deviceCc) {
+    const v = deviceCc[id][ctrl];
+    if (v !== undefined) { sum += v; n++; }
+  }
+  return n ? sum / n : 0;
 }
 
 const isOdd = (input) => /odd/i.test(input.name);
@@ -818,6 +837,9 @@ function bindInputs(inputs) {
   for (const inp of midi.inputs.values()) inp.onmidimessage = null;
   activeInputs = inputs;
   for (const inp of inputs) inp.onmidimessage = onMidiMessage;
+  // Drop stale per-device state so a removed controller stops contributing.
+  for (const k in deviceCc) delete deviceCc[k];
+  rollAccum = 0;
   if (inputs.length === 0) { setStatus(false, "disconnected"); return; }
   setStatus(true, inputs.length > 1 ? `connected · ${inputs.length}` : "connected");
   els.hint.classList.add("hide");
@@ -936,7 +958,10 @@ async function init() {
     // Convert CC change accumulated since last frame into a smoothed 0..1 speed.
     const dt = Math.max(0.001, (now - lastFrame) / 1000);
     lastFrame = now;
-    const changePerSec = rollAccum / dt;      // CC units/second on channels 4-6
+    // Average the per-device roll motion so binding N balls doesn't inflate
+    // the rate N-fold (which would peg roll speed with several controllers).
+    const nDev = Math.max(1, activeInputs.length);
+    const changePerSec = (rollAccum / nDev) / dt;  // CC units/second on channels 4-6
     rollAccum = 0;
     // The ball sends CC4-6 in tight bursts, so the per-frame rate is very
     // spiky. Use a time-weighted EMA (framerate-independent) so the smoothed
