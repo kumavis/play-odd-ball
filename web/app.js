@@ -214,6 +214,15 @@ const seqOnset = {};               // source -> { prev, last } rising-edge track
 const SEQ_ONSET_LO = 0.06;         // fall below this to re-arm the trigger
 const SEQ_ONSET_HI = 0.14;         // rise above this to fire the chain
 const SEQ_ONSET_COOLDOWN = 220;    // ms minimum between chain triggers
+
+// Drop queued chain steps, onset trackers and live trigger envelopes — called
+// when the patch is cleared or swapped so steps scheduled milliseconds earlier
+// can't fire into the new layout.
+function resetSeqRuntime() {
+  seqQueue.length = 0;
+  for (const k in seqOnset) delete seqOnset[k];
+  for (const k in seqEnv) delete seqEnv[k];
+}
 const isGestureSource = (src) => !!(PARAMS[src] && PARAMS[src].gesture);
 const gestureBySource = (src) =>
   (src && src.slice(0, 2) === "g:") ? gestures.find((g) => g.id === src.slice(2)) : null;
@@ -1346,6 +1355,7 @@ function applyProfile(id) {
 
   // Clear the current patch (removes cables) and swap the moves wholesale.
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
   for (const g of gestures.slice()) unregisterGestureParam(g.id);
   gestures = (Array.isArray(profile.gestures) ? profile.gestures : [])
     .map(gestureFromData).filter(Boolean);
@@ -1758,6 +1768,7 @@ async function previewInstrument(key, btn) {
 // Disconnect every instrument from its trigger — a clean slate.
 function clearPatch() {
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
   closeEditor();
   refreshConnectionStyles();
   saveStateSoon();
@@ -1768,6 +1779,7 @@ function clearPatch() {
 // result is playable rather than a wall of sound.
 function randomizePatch() {
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
   const paramKeys = Object.keys(PARAMS);
   const insts = INSTRUMENTS.slice();
   for (let i = insts.length - 1; i > 0; i--) {           // Fisher–Yates shuffle
