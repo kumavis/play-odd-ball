@@ -952,17 +952,24 @@ function buildGraph() {
     graph.sparkCanvas[key] = node.querySelector(".spark");
   });
 
-  // Instrument nodes (right) with input ports.
+  // Instrument nodes (right) with input ports and a preview button.
   INSTRUMENTS.forEach((inst) => {
     const { node, port } = makeNode(
       "gnode--inst",
-      `<span class="glabel">${inst.label}</span><span class="gval"></span>`,
+      `<button class="gtest" title="Preview ${inst.label}" aria-label="Preview ${inst.label}">▶</button>` +
+        `<span class="glabel">${inst.label}</span><span class="gval"></span>`,
       "gport--in"
     );
     port.dataset.port = "in";
     port.dataset.key = inst.key;
     graph.instPorts[inst.key] = port;
     graph.instNodes[inst.key] = node;
+    const testBtn = node.querySelector(".gtest");
+    testBtn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    testBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      previewInstrument(inst.key, testBtn);
+    });
   });
 
   layoutGraph();
@@ -1056,6 +1063,26 @@ function refreshConnectionStyles() {
     const on = !!connections[inst.key];
     graph.instPorts[inst.key].classList.toggle("is-connected", on);
     graph.instNodes[inst.key].classList.toggle("is-off", !on);
+  }
+}
+
+// Play a short demo of one instrument. Ensures the audio context is running
+// (resuming it briefly even if global sound is off) without changing the user's
+// sound on/off intent, then flashes the button while it plays.
+async function previewInstrument(key, btn) {
+  if (!audio.ctx) {
+    await audio.enable();
+    setSoundButton(true);
+    soundIntent = true;
+  } else if (audio.ctx.state === "suspended") {
+    await audio.ctx.resume();
+    // Global sound is off: re-suspend after the demo finishes so we honor it.
+    if (!audio.enabled) setTimeout(() => { if (!audio.enabled) audio.ctx.suspend(); }, 1800);
+  }
+  audio.preview(key);
+  if (btn) {
+    btn.classList.add("is-playing");
+    setTimeout(() => btn.classList.remove("is-playing"), 1300);
   }
 }
 

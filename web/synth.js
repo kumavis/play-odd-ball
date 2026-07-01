@@ -119,8 +119,46 @@ class AudioEngine {
   // Route a 0..1 parameter value into a continuous voice.
   setVoice(key, value) {
     if (!this.enabled) return;
+    if (this.previewing && this.previewing[key]) return; // a preview owns this voice
     const v = this.voices[key];
     if (v) v.set(clamp01(value));
+  }
+
+  // Play a short, representative demo of a single instrument so the user can
+  // hear what it sounds like. Continuous voices get a swell; event/tap voices
+  // (chimes, laser, lightning…) fire their hit(s) by being held "active".
+  // While previewing, the per-frame setVoice updates are ignored for that key
+  // so the demo envelope isn't immediately overwritten by the patch loop.
+  preview(key) {
+    if (!this.ctx) return;
+    if (key === "chimes") {
+      const pe = this.enabled, pc = this.chimesOn;
+      this.enabled = true; this.chimesOn = true;
+      this.hit(110, 0.45);
+      this.chimesOn = pc; this.enabled = pe;
+      return;
+    }
+    const v = this.voices[key];
+    if (!v) return;
+    if (!this.previewing) this.previewing = {};
+    const id = (this.previewing[key] || 0) + 1;
+    this.previewing[key] = id;
+
+    const start = performance.now();
+    const dur = 1300;          // total demo length in ms
+    const attack = 90, release = 500;
+    const tick = () => {
+      if (this.previewing[key] !== id) return;          // cancelled/superseded
+      const el = performance.now() - start;
+      if (el >= dur) { v.set(0); this.previewing[key] = 0; return; }
+      let val;
+      if (el < attack) val = 0.95 * (el / attack);
+      else if (el < dur - release) val = 0.95;
+      else val = 0.95 * (1 - (el - (dur - release)) / release);
+      v.set(clamp01(val));
+      requestAnimationFrame(tick);
+    };
+    tick();
   }
 
   _out() {
