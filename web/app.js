@@ -1137,6 +1137,25 @@ function shape(conn, instKey) {
   return clamp1(gated) * conn.atten;
 }
 
+// Chimes are an event instrument (audio.hit), not a continuous voice, so a
+// connection can't just stream a level into them. A plain tap connection keeps
+// the zero-latency per-note path (true velocity, retriggers on every bounce);
+// any other source fires one chime per rising edge of its shaped value — which
+// also covers sequenced chains, whose per-instrument envelope jumps 0→1 when
+// the chain step lands.
+const chimeState = { prev: 0, last: 0 };
+const chimeDirect = (conn) => !!conn && conn.source === "tap" && !sourceSequenced("tap");
+function updateChimes(conn, v, now) {
+  if (!conn) { chimeState.prev = 0; return; }
+  if (!chimeDirect(conn)) {
+    if (chimeState.prev < SEQ_ONSET_LO && v >= SEQ_ONSET_HI && now - chimeState.last > SEQ_ONSET_COOLDOWN) {
+      chimeState.last = now;
+      audio.hit(Math.round(clamp1(v) * 127), (cc[3] ?? 64) / 127);
+    }
+  }
+  chimeState.prev = v;
+}
+
 // ---- Persistence: patch config + settings survive a reload ---------------
 const STORAGE_KEY = "oddball.patchbay.v1";
 let loading = true;        // suppress saves while restoring on startup
@@ -1935,10 +1954,12 @@ function setSeqMode(mode) {
 
 function updateInstruments() {
   const svg = document.getElementById("graphSvg");
+  const now = performance.now();
   for (const inst of INSTRUMENTS) {
     const conn = connections[inst.key];
     const v = shape(conn, inst.key);
     if (inst.key !== "chimes") audio.setVoice(inst.key, v);
+    else updateChimes(conn, v, now);
 
     // Draw / update the cable for this instrument's connection.
     let c = graph.cables[inst.key];
@@ -2154,8 +2175,10 @@ function onMidiMessage(e) {
       { duration: 320, easing: "ease-out" }
     );
     spawnRipple(d2);
-    // Pitch follows X orientation (CC3) so moving the ball plays different notes.
-    if (isTap) audio.hit(d2, (cc[3] ?? 64) / 127);
+    // Pitch follows X orientation (CC3) so moving the ball plays different
+    // notes. Only the direct tap→chimes patch fires from here; other sources
+    // trigger chimes from their own value edges in updateChimes.
+    if (isTap && chimeDirect(connections.chimes)) audio.hit(d2, (cc[3] ?? 64) / 127);
     logEvent(`<b>NOTE</b> ${noteName(d1)} (${d1}) vel ${d2}${gesture ? ` · ${gesture}` : ""}`, "note");
   } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {  // note off
     // (Quiet in the log to avoid clutter.)
