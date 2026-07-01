@@ -424,12 +424,24 @@ class AudioEngine {
 
   // Random-trigger scheduler shared by the sprinkly/percussive voices. Returns
   // true (and advances voice.last) when it's time to fire an event.
+  //
+  // Two ways to fire:
+  //   • Rising edge — a fast jump in value (a fresh tap / gesture spike) fires
+  //     immediately, as long as we're past a short retrigger gap. This is what
+  //     lets transient sources like the Tap envelope actually trigger one-shot
+  //     voices (their spike is too brief to ever satisfy the sustained clock).
+  //   • Sustained — while the value stays up, keep firing at an interval that
+  //     shortens as the value grows.
   _due(voice, v, minMs, maxMs) {
     const now = performance.now();
-    if (v <= 0.02) { voice.last = now; return false; }
+    const prev = voice.prevV ?? 0;
+    voice.prevV = v;
+    if (v <= 0.02) return false;          // silent: don't fire, and don't reset the clock
+    const sinceLast = now - voice.last;
+    if (v - prev > 0.1 && sinceLast >= minMs * 0.5) { voice.last = now; return true; }
     const base = maxMs - v * (maxMs - minMs);
     const interval = base * (0.5 + Math.random());
-    if (now - voice.last >= interval) { voice.last = now; return true; }
+    if (sinceLast >= interval) { voice.last = now; return true; }
     return false;
   }
 
