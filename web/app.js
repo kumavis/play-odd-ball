@@ -18,6 +18,7 @@ const els = {
   hint: document.getElementById("hint"),
   soundToggle: document.getElementById("soundToggle"),
   randomPatch: document.getElementById("randomPatch"),
+  clearPatch: document.getElementById("clearPatch"),
   rollFill: document.getElementById("rollFill"),
   rollVal: document.getElementById("rollVal"),
   gateMark: document.getElementById("gateMark"),
@@ -1058,6 +1059,14 @@ function refreshConnectionStyles() {
   }
 }
 
+// Disconnect every instrument from its trigger — a clean slate.
+function clearPatch() {
+  for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  closeEditor();
+  refreshConnectionStyles();
+  saveStateSoon();
+}
+
 // Build a fresh random patch: pick a handful of instruments and wire each to a
 // random parameter with a random response curve. Kept to a few voices so the
 // result is playable rather than a wall of sound.
@@ -1535,6 +1544,7 @@ async function init() {
 
   els.soundToggle.addEventListener("click", toggleSound);
   els.randomPatch.addEventListener("click", randomizePatch);
+  els.clearPatch.addEventListener("click", clearPatch);
   els.recSession.addEventListener("click", toggleSessionRec);
   els.recMove.addEventListener("click", toggleRecordMove);
   els.importMove.addEventListener("click", () => els.importFile.click());
