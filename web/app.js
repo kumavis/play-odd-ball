@@ -411,18 +411,29 @@ function autoTrim(raw) {
   return { start, end };
 }
 
-// DTW distance between two equal-length z-normalized sequences. Local cost is
-// Euclidean distance scaled by sqrt(D); result is averaged over the path length
-// so the returned number is an average per-step distance (dimension-agnostic).
+// DTW distance between two normalized sequences. Local cost is Euclidean
+// distance scaled by sqrt(D); result is divided by the candidate length so the
+// returned number is an average per-step distance (dimension-agnostic).
+//
+// A Sakoe-Chiba band constrains warping to cells within DTW_BAND of the
+// diagonal. Without it, two genuinely different gestures can be stretched into
+// alignment (false positives); the band also skips most of the cost matrix.
 function dtwDist(a, b) {
   const n = a.length, m = b.length, D = GEST_DIMS.length, invD = 1 / Math.sqrt(D);
   const INF = Infinity;
+  const band = Math.max(1, Math.round(Math.max(n, m) * DTW_BAND));
   let prev = new Array(m + 1).fill(INF);
   let cur = new Array(m + 1).fill(INF);
   prev[0] = 0;
   for (let i = 1; i <= n; i++) {
-    cur[0] = INF;
-    for (let j = 1; j <= m; j++) {
+    // Reset the row so cells outside this row's band stay unreachable (INF)
+    // instead of holding stale values from two rows back (arrays are swapped).
+    cur.fill(INF);
+    // Center the band on the diagonal, scaled in case the lengths differ.
+    const center = Math.round((i * m) / n);
+    const jlo = Math.max(1, center - band);
+    const jhi = Math.min(m, center + band);
+    for (let j = jlo; j <= jhi; j++) {
       let s = 0;
       for (let d = 0; d < D; d++) { const diff = a[i - 1][d] - b[j - 1][d]; s += diff * diff; }
       const cost = Math.sqrt(s) * invD;
@@ -443,19 +454,25 @@ function handleSegment(now, feat) {
   if (!seg) {
     if ((recordingGesture || gestures.length) && act > SEG_START) {
       const lo = now - SEG_PREROLL;
-      seg = { frames: histFrames.filter((h) => h.t >= lo).slice() };
+      seg = { frames: histFrames.filter((h) => h.t >= lo).slice(), peak: act };
       segLastActive = now;
     }
     return;
   }
   seg.frames.push({ t: now, feat });
+  if (act > seg.peak) seg.peak = act;
   if (act > SEG_END) segLastActive = now;
   if (now - segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
     const all = seg.frames;
+    const peak = seg.peak;
     seg = null;
     const kept = all.filter((h) => h.t <= segLastActive + 120);
     const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
-    if (kept.length >= 6 && durMs >= SEG_MIN_MS) processSegment(kept.map((h) => h.feat));
+    // Require a clear activity peak so drift that just grazes SEG_START then
+    // fades is rejected rather than matched as a (garbage) move.
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) {
+      processSegment(kept.map((h) => h.feat));
+    }
   }
 }
 
