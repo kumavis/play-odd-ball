@@ -80,7 +80,6 @@ let activeInputs = [];   // every MIDIInput currently feeding the app
 let msgCount = 0;
 
 const audio = new AudioEngine();
-let lastMotion = 0;
 
 // Rolling detection: accumulate absolute change of the ORIENTATION CCs (4-6)
 // between animation frames, then smooth into a 0..1 "speed" that drives the
@@ -101,6 +100,13 @@ let rollRaw = 0;       // ungated normalized rate (0..1) for the meter
 let ROLL_SCALE = 1300; // CC units/sec (on 4-6) that maps to full intensity
 let ROLL_GATE = 0.5;   // fraction of ROLL_SCALE (~650/sec) below which it's silent
 let ROLL_TAU = 0.22;   // seconds; smoothing time-constant for the rate
+
+// Motion energy = how fast the orientation is changing (a velocity), NOT how
+// far the ball is tilted. gestActivity is the smoothed Σ|Δfeat|/s used by the
+// segmenter; this scale maps a vigorous move to ~1.0 while a still ball (held
+// at any angle) reads near 0.
+const MOTION_SCALE = 7.0;
+let lastMotion = 0;    // 0..1 normalized motion energy (updated each frame)
 
 // A decaying envelope that jumps to the tap velocity on each note, usable as a
 // modulation source for the instruments.
@@ -1619,7 +1625,9 @@ function updateOrb() {
   const tiltX = (v(0) - 64) / 64;   // -1..1
   const tiltY = (v(1) - 64) / 64;
   const roll = (v(2) - 64) / 64;
-  const energy = Math.min(1, (Math.abs(tiltX) + Math.abs(tiltY) + Math.abs(roll)) / 1.5);
+  // Glow tracks actual MOTION (updated each frame from gestActivity), not the
+  // static tilt — so a still ball doesn't stay lit up at an angle.
+  const energy = lastMotion;
 
   const rotX = (-tiltY * 35).toFixed(1);
   const rotY = (tiltX * 35).toFixed(1);
@@ -1637,9 +1645,6 @@ function updateOrb() {
 
   els.shadow.style.transform = `translateX(${tiltX * 30}px) scale(${1 - energy * 0.25})`;
   els.shadow.style.opacity = `${0.5 - energy * 0.2}`;
-
-  lastMotion = energy;
-  audio.setMotion(energy);
 }
 
 let soundIntent = true; // desired on/off; audio may be gated by autoplay policy
@@ -2010,6 +2015,9 @@ async function init() {
     }
     const gfeat = featureVec();
     updateGestureActivity(now, dt, gfeat);
+    // Motion energy is the smoothed orientation-change speed, normalized 0..1.
+    lastMotion = clamp1(gestActivity / MOTION_SCALE);
+    audio.setMotion(lastMotion);
     handleSegment(now, gfeat);
 
     updateInstruments();
