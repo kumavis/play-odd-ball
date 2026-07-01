@@ -31,6 +31,8 @@ const els = {
   histLegend: document.getElementById("histLegend"),
   recSession: document.getElementById("recSession"),
   recMove: document.getElementById("recMove"),
+  importMove: document.getElementById("importMove"),
+  importFile: document.getElementById("importFile"),
   gestureList: document.getElementById("gestureList"),
   drawer: document.getElementById("drawer"),
   viewToggles: document.getElementById("viewToggles"),
@@ -95,18 +97,29 @@ const PARAMS = {
 const paramValue = (key) => (PARAMS[key] ? PARAMS[key].get() : 0);
 
 // ---- Gesture recognition + session recording ----------------------------
-// A "move" is a short burst of motion (bracketed by stillness). We watch the
-// live motion energy, cut out each burst as a segment, resample it to a fixed
-// length and z-normalize it so speed/scale don't matter, then compare against
-// saved templates with Dynamic Time Warping. A close enough match fires a
-// decaying envelope that shows up as its own trigger source in the patch bay.
+// A "move" is a burst of motion (bracketed by stillness). We cut each burst out
+// of the live stream, resample it to a fixed length and normalize it so speed &
+// scale don't matter, then match it against saved templates with Dynamic Time
+// Warping. A close enough match fires a decaying envelope that shows up as its
+// own trigger source in the patch bay.
+//
+// Crucially, the segmenter keys off how FAST the orientation is changing — not
+// the orb's "energy", which saturates whenever the ball is simply held at an
+// extreme angle (e.g. through an arm-slingshot wind-up) and so can never mark
+// the move as finished. Delta-based activity stays low while the ball is held
+// still at any angle and spikes on the actual throw / snap / catch.
 const GEST_DIMS = [0, 1, 2, 3, 4, 5, 6]; // orientation + spin CCs
+// The PARAMS keys those dims are stored under in a recorded session file, in
+// the same order — used to rebuild feature frames when importing a session.
+const GEST_DIM_KEYS = ["tilt_x", "tilt_y", "tilt_z", "cc3", "cc4", "cc5", "cc6"];
 const GEST_N = 32;                        // template length after resampling
-const SEG_START = 0.22;                   // motion energy that begins a segment
-const SEG_END = 0.10;                     // energy under which motion is "done"
-const SEG_HOLD = 220;                     // ms of stillness that ends a segment
-const SEG_MIN = 8;                        // ignore blips shorter than this
-const SEG_MAX = 2600;                     // ms cap on a single move
+const GEST_ACT_TAU = 0.15;                // s; smoothing for the activity signal
+const SEG_START = 4.0;                    // activity (Σ|Δfeat|/s) that begins a move
+const SEG_END = 1.4;                      // activity under which the ball is "still"
+const SEG_HOLD = 400;                     // ms below SEG_END that ends a move
+const SEG_PREROLL = 320;                  // ms of pre-motion frames folded into a move
+const SEG_MIN_MS = 260;                   // ignore twitches shorter than this
+const SEG_MAX = 4000;                     // ms cap on a single move
 const GESTURE_KEY = "oddball.gestures.v1";
 const GEST_PALETTE = ["#ff8fab", "#ffd166", "#8ec5ff", "#c792ea", "#7cffcb", "#ff9f6b", "#f871ff"];
 
@@ -114,10 +127,46 @@ let gestures = [];                 // [{ id, name, color, threshold, template }]
 const gestureEnv = {};             // id -> 0..1 decaying trigger envelope
 const gestureCool = {};            // id -> last-fire timestamp (debounce)
 let recordingGesture = null;       // { name } while armed to capture a template
-let seg = null;                    // { frames, startT } current motion segment
+let seg = null;                    // { frames: [{t,feat}] } current motion segment
 let segLastActive = 0;
+let gestActivity = 0;              // smoothed Σ|Δfeat|/s
+let prevFeat = null;
+const histFrames = [];             // recent { t, feat } ring, for segment pre-roll
+const HIST_MS = 4000;
 
 const featureVec = () => GEST_DIMS.map((c) => (cc[c] ?? 0) / 127);
+
+// Track how fast the orientation is changing (framerate-independent) and keep a
+// short history buffer so a move's wind-up can be folded in as pre-roll.
+function updateGestureActivity(now, dt, feat) {
+  let speed = 0;
+  if (prevFeat) { let s = 0; for (let i = 0; i < feat.length; i++) s += Math.abs(feat[i] - prevFeat[i]); speed = s / dt; }
+  prevFeat = feat;
+  const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
+  gestActivity += (speed - gestActivity) * a;
+  histFrames.push({ t: now, feat });
+  while (histFrames.length && now - histFrames[0].t > HIST_MS) histFrames.shift();
+}
+
+// Given [{t,feat}] frames, compute the same activity signal and return the feat
+// rows spanning the active region (with pre-roll), trimming idle head/tail. Used
+// when importing a recorded session so a saved move matches what the live
+// segmenter would have captured.
+function activeRegion(frames) {
+  if (frames.length < 3) return frames.map((f) => f.feat);
+  let ema = 0, firstT = null, lastT = null;
+  for (let i = 0; i < frames.length; i++) {
+    const dt = i ? Math.max(0.001, (frames[i].t - frames[i - 1].t) / 1000) : 0.05;
+    let speed = 0;
+    if (i) { let s = 0; for (let d = 0; d < frames[i].feat.length; d++) s += Math.abs(frames[i].feat[d] - frames[i - 1].feat[d]); speed = s / dt; }
+    const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
+    ema += (speed - ema) * a;
+    if (ema > SEG_END) { if (firstT === null) firstT = frames[i].t; lastT = frames[i].t; }
+  }
+  if (firstT === null) return frames.map((f) => f.feat);
+  const lo = firstT - SEG_PREROLL, hi = lastT + 120;
+  return frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
+}
 
 // Resample a variable-length list of frames to N points, mean-center each
 // dimension (so absolute orientation offset doesn't matter), then divide every
@@ -173,23 +222,29 @@ function dtwDist(a, b) {
   return prev[m] / n;
 }
 
-// Feed each animation frame's motion energy in; when a move completes it is
-// either saved as a template (if we're arming a recording) or matched.
-function handleSegment(act, now) {
-  const feat = featureVec();
+// Feed each frame in; when a move completes it is either saved as a template
+// (if we're arming a recording) or matched. A move starts when activity crosses
+// SEG_START (pulling in ~SEG_PREROLL ms of preceding frames so the wind-up is
+// kept) and ends after SEG_HOLD ms back under SEG_END. Trailing stillness is
+// trimmed so a slow settle at the end doesn't skew the template.
+function handleSegment(now, feat) {
+  const act = gestActivity;
   if (!seg) {
     if ((recordingGesture || gestures.length) && act > SEG_START) {
-      seg = { frames: [feat], startT: now };
+      const lo = now - SEG_PREROLL;
+      seg = { frames: histFrames.filter((h) => h.t >= lo).slice() };
       segLastActive = now;
     }
     return;
   }
-  seg.frames.push(feat);
+  seg.frames.push({ t: now, feat });
   if (act > SEG_END) segLastActive = now;
-  if (now - segLastActive > SEG_HOLD || now - seg.startT > SEG_MAX) {
-    const frames = seg.frames;
+  if (now - segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
+    const all = seg.frames;
     seg = null;
-    if (frames.length >= SEG_MIN) processSegment(frames);
+    const kept = all.filter((h) => h.t <= segLastActive + 120);
+    const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS) processSegment(kept.map((h) => h.feat));
   }
 }
 
@@ -307,11 +362,38 @@ function updateRecMoveBtn() {
 
 function toggleRecordMove() {
   if (recordingGesture) { recordingGesture = null; updateRecMoveBtn(); return; }
-  const name = (window.prompt("Name this move:", `Move ${gestures.length + 1}`) || "").trim();
-  if (name === null) return;
-  recordingGesture = { name: name || `Move ${gestures.length + 1}` };
+  const name = (window.prompt("Name this move, then perform it once:", `Move ${gestures.length + 1}`) || "").trim();
+  if (!name) return;
+  recordingGesture = { name };
   seg = null; // start fresh; the next burst of motion becomes the template
   updateRecMoveBtn();
+}
+
+// Turn a recorded session JSON (from the Record button) into a gesture template.
+// We rebuild the orientation feature frames, trim to the active region the live
+// segmenter would have captured, then resample + normalize like any other move.
+function importSessionFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let data = null;
+    try { data = JSON.parse(reader.result); } catch (e) { data = null; }
+    const samples = data && data.samples;
+    if (!Array.isArray(samples) || samples.length < 4) {
+      logEvent("<b>IMPORT</b> that file has no usable session samples", "note");
+      return;
+    }
+    const frames = samples.map((s) => ({
+      t: s.t || 0,
+      feat: GEST_DIM_KEYS.map((k) => { const v = s.values && s.values[k]; return typeof v === "number" ? v : 0; }),
+    }));
+    const active = activeRegion(frames);
+    if (active.length < 6) { logEvent("<b>IMPORT</b> couldn't find a move in that recording", "note"); return; }
+    const suggested = (file.name || "Imported move").replace(/\.json$/i, "").replace(/^oddball-session-.*$/, "Imported move");
+    const name = (window.prompt("Name this imported move:", suggested) || "").trim();
+    if (!name) return;
+    saveGesture(name, resampleNorm(active, GEST_N));
+  };
+  reader.readAsText(file);
 }
 
 function renderGestures() {
@@ -1224,6 +1306,12 @@ async function init() {
   els.randomPatch.addEventListener("click", randomizePatch);
   els.recSession.addEventListener("click", toggleSessionRec);
   els.recMove.addEventListener("click", toggleRecordMove);
+  els.importMove.addEventListener("click", () => els.importFile.click());
+  els.importFile.addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) importSessionFile(f);
+    e.target.value = ""; // allow re-importing the same file
+  });
   // Gesture list: sensitivity sliders + delete buttons (event delegation).
   els.gestureList.addEventListener("input", (e) => {
     const sl = e.target.closest(".g-sens");
@@ -1303,10 +1391,12 @@ async function init() {
     rollSpeed = rollRaw <= ROLL_GATE ? 0 : (rollRaw - ROLL_GATE) / (1 - ROLL_GATE);
     tapEnv *= 0.88; // decay the tap envelope each frame
 
-    // Gesture triggers: decay their envelopes, then feed this frame's motion
-    // energy to the segmenter (which fires a match or captures a template).
+    // Gesture triggers: decay their envelopes, update the motion-activity
+    // signal, then feed the segmenter (which fires a match or captures a move).
     for (const id in gestureEnv) gestureEnv[id] *= 0.85;
-    handleSegment(Math.max(lastMotion, rollRaw), now);
+    const gfeat = featureVec();
+    updateGestureActivity(now, dt, gfeat);
+    handleSegment(now, gfeat);
 
     updateInstruments();
     renderRoll();

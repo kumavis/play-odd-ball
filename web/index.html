@@ -46,6 +46,8 @@
           <div class="hist-actions">
             <button id="recSession" class="rec-btn" title="Record this session's data and download it">⏺ Record</button>
             <button id="recMove" class="rec-btn" title="Record a move, then wire it as a trigger in the patch bay">✋ Record move</button>
+            <button id="importMove" class="rec-btn" title="Turn a recorded session file into a move trigger">📂 Import move</button>
+            <input id="importFile" type="file" accept="application/json,.json" hidden />
           </div>
         </div>
         <canvas id="histCanvas" class="hist-canvas"></canvas>
