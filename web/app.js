@@ -885,14 +885,13 @@ function deleteProfile(id) {
   renderProfiles();
 }
 
-function renameProfile(id) {
-  const p = profiles.find((x) => x.id === id);
+// Commit an inline-edited profile name. Empty reverts to the previous name.
+function commitProfileName(input) {
+  const p = profiles.find((x) => x.id === input.dataset.name);
   if (!p) return;
-  const name = (window.prompt("Rename profile:", p.name) || "").trim();
-  if (!name || name === p.name) return;
-  p.name = name;
-  writeProfiles();
-  renderProfiles();
+  const name = input.value.trim();
+  if (!name) { input.value = p.name; return; }
+  if (name !== p.name) { p.name = name; writeProfiles(); }
 }
 
 function renderProfiles() {
@@ -913,13 +912,12 @@ function renderProfiles() {
     row.className = "profile";
     row.innerHTML =
       `<div class="profile-main">` +
-        `<div class="profile-name"></div>` +
+        `<input class="profile-name" data-name="${p.id}" spellcheck="false" title="Tap to rename" />` +
         `<div class="profile-meta">${nSounds} sound${nSounds === 1 ? "" : "s"} · ${nMoves} move${nMoves === 1 ? "" : "s"}</div>` +
       `</div>` +
       `<button class="profile-load" data-load="${p.id}">Load</button>` +
-      `<button class="profile-edit" data-edit="${p.id}" title="Rename profile">✎</button>` +
       `<button class="profile-del" data-del="${p.id}" title="Delete profile">×</button>`;
-    row.querySelector(".profile-name").textContent = p.name;
+    row.querySelector(".profile-name").value = p.name;
     box.appendChild(row);
   }
 }
@@ -1721,13 +1719,20 @@ async function init() {
   els.profileList.addEventListener("click", (e) => {
     const load = e.target.closest(".profile-load");
     if (load) { applyProfile(load.dataset.load); return; }
-    const edit = e.target.closest(".profile-edit");
-    if (edit) { renameProfile(edit.dataset.edit); return; }
     const del = e.target.closest(".profile-del");
     if (del) {
       const p = profiles.find((x) => x.id === del.dataset.del);
       if (p && window.confirm(`Delete profile “${p.name}”?`)) deleteProfile(del.dataset.del);
     }
+  });
+  // Inline rename: edit the name field directly; save on blur / Enter.
+  els.profileList.addEventListener("change", (e) => {
+    const inp = e.target.closest(".profile-name");
+    if (inp) commitProfileName(inp);
+  });
+  els.profileList.addEventListener("keydown", (e) => {
+    const inp = e.target.closest(".profile-name");
+    if (inp && e.key === "Enter") { e.preventDefault(); inp.blur(); }
   });
   els.recSession.addEventListener("click", toggleSessionRec);
   els.recMove.addEventListener("click", toggleRecordMove);
