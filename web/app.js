@@ -69,6 +69,10 @@ const els = {
   ceDisconnect: document.getElementById("ceDisconnect"),
   ceSeq: document.getElementById("ceSeq"),
   ceSeqPos: document.getElementById("ceSeqPos"),
+  ceSeqMode: document.getElementById("ceSeqMode"),
+  ceModeTogether: document.getElementById("ceModeTogether"),
+  ceModeSeq: document.getElementById("ceModeSeq"),
+  ceSeqBody: document.getElementById("ceSeqBody"),
   ceSeqUp: document.getElementById("ceSeqUp"),
   ceSeqDown: document.getElementById("ceSeqDown"),
   ceSeqGap: document.getElementById("ceSeqGap"),
@@ -168,6 +172,13 @@ const gestureCool = {};            // id -> last-fire timestamp (debounce)
 const SEQ_GAP_DEFAULT = 130;       // ms between steps of a movement's chain
 const seqEnv = {};                 // instKey -> 0..1 decaying per-instrument trigger
 const seqQueue = [];               // pending [{ instKey, at }]
+// Per-source playback config for plain inputs (roll, tap, motion, …). Gestures
+// carry their own seqGap and always play as a sequence, so they don't live here.
+const seqCfg = {};                 // source -> { mode: "together"|"sequence", gap }
+const seqOnset = {};               // source -> { prev, last } rising-edge tracker
+const SEQ_ONSET_LO = 0.06;         // fall below this to re-arm the trigger
+const SEQ_ONSET_HI = 0.14;         // rise above this to fire the chain
+const SEQ_ONSET_COOLDOWN = 220;    // ms minimum between chain triggers
 const isGestureSource = (src) => !!(PARAMS[src] && PARAMS[src].gesture);
 const gestureBySource = (src) =>
   (src && src.slice(0, 2) === "g:") ? gestures.find((g) => g.id === src.slice(2)) : null;
@@ -178,6 +189,34 @@ function siblingsOf(source) {
     .filter((i) => connections[i.key] && connections[i.key].source === source)
     .map((i) => i.key)
     .sort((a, b) => (connections[a].order ?? 0) - (connections[b].order ?? 0));
+}
+
+function seqConfig(source) {
+  return seqCfg[source] || (seqCfg[source] = { mode: "together", gap: SEQ_GAP_DEFAULT });
+}
+
+// A source plays its instruments one-after-another when it's a recorded gesture
+// (always) or a plain input the user switched into "sequence" mode.
+function sourceSequenced(source) {
+  if (isGestureSource(source)) return true;
+  return !!(seqCfg[source] && seqCfg[source].mode === "sequence");
+}
+
+function seqGapFor(source) {
+  if (isGestureSource(source)) {
+    const g = gestureBySource(source);
+    return g ? (g.seqGap ?? SEQ_GAP_DEFAULT) : SEQ_GAP_DEFAULT;
+  }
+  return seqConfig(source).gap;
+}
+
+// Fire a source's connected instruments in play order, staggered by `gap` ms.
+function fireChain(source, gap) {
+  const now = performance.now();
+  siblingsOf(source).forEach((instKey, i) => {
+    if (gap > 0 && i > 0) seqQueue.push({ instKey, at: now + i * gap });
+    else seqEnv[instKey] = 1;
+  });
 }
 let recordingGesture = null;       // { name } while armed to capture a template
 let seg = null;                    // { frames: [{t,feat}] } current motion segment
@@ -412,12 +451,7 @@ function fireGesture(g, d) {
   gestureEnv[g.id] = 1;
   // Trigger each connected instrument on its own envelope, staggered by the
   // move's spacing in play order, so the sounds fire as a sequence.
-  const gap = g.seqGap ?? SEQ_GAP_DEFAULT;
-  const chain = siblingsOf("g:" + g.id);
-  chain.forEach((instKey, i) => {
-    if (gap > 0 && i > 0) seqQueue.push({ instKey, at: now + i * gap });
-    else seqEnv[instKey] = 1;
-  });
+  fireChain("g:" + g.id, g.seqGap ?? SEQ_GAP_DEFAULT);
   logEvent(`<b>GESTURE</b> ${g.name} matched · d=${d.toFixed(2)}`, "note");
   const row = els.gestureList.querySelector(`.gesture[data-id="${g.id}"]`);
   if (row) { row.classList.add("is-hit"); setTimeout(() => row.classList.remove("is-hit"), 450); }
@@ -798,10 +832,10 @@ connections.chimes = mkConn("tap");
 
 function shape(conn, instKey) {
   if (!conn) return 0;
-  // Gesture-driven instruments read their own (possibly delayed) sequence
-  // envelope so a movement can fire its instruments in order; everything else
-  // reads the live parameter value.
-  const raw = (instKey && isGestureSource(conn.source))
+  // Sequenced instruments read their own (possibly delayed) trigger envelope so
+  // a single movement can fire its instruments in order; everything else reads
+  // the live parameter value and plays continuously / simultaneously.
+  const raw = (instKey && sourceSequenced(conn.source))
     ? (seqEnv[instKey] || 0)
     : paramValue(conn.source);
   const t = conn.thresh;
@@ -821,6 +855,7 @@ function serializeState() {
   });
   return {
     connections,
+    seqCfg,
     sensitivity: +els.sens.value,
     sound: soundIntent,
     views,
@@ -865,6 +900,14 @@ function applySavedState(saved) {
         if (typeof c.order === "number") connections[instKey].order = c.order;
       } else if (c === null) {
         connections[instKey] = null;
+      }
+    }
+  }
+  if (saved.seqCfg && typeof saved.seqCfg === "object") {
+    for (const src in saved.seqCfg) {
+      const c = saved.seqCfg[src];
+      if (c && (c.mode === "together" || c.mode === "sequence")) {
+        seqCfg[src] = { mode: c.mode, gap: typeof c.gap === "number" ? c.gap : SEQ_GAP_DEFAULT };
       }
     }
   }
@@ -920,6 +963,7 @@ function saveCurrentProfile() {
     name,
     created: Date.now(),
     connections: serializeConnections(),
+    seqCfg: JSON.parse(JSON.stringify(seqCfg)),
     gestures: serializeGestures(),
     sensitivity: +els.sens.value,
   });
@@ -943,6 +987,17 @@ function applyProfile(id) {
   for (const g of gestures) registerGestureParam(g);
   persistGestures();
   rebuildGraph();                 // recreate source nodes for the profile's moves
+
+  // Restore per-source playback config (together vs. in order).
+  for (const k in seqCfg) delete seqCfg[k];
+  if (profile.seqCfg && typeof profile.seqCfg === "object") {
+    for (const src in profile.seqCfg) {
+      const c = profile.seqCfg[src];
+      if (c && (c.mode === "together" || c.mode === "sequence")) {
+        seqCfg[src] = { mode: c.mode, gap: typeof c.gap === "number" ? c.gap : SEQ_GAP_DEFAULT };
+      }
+    }
+  }
 
   // Now that every source exists, apply the saved connections.
   const conns = profile.connections || {};
@@ -1491,25 +1546,45 @@ function updateEditorLabels() {
   els.ceAttenVal.textContent = conn.atten.toFixed(2);
 }
 
-// Show the sequence controls only when this cable comes from a movement that
-// drives more than one instrument (i.e. there's an order worth choosing).
+// Show the playback controls whenever this cable's source drives more than one
+// instrument, so there's actually an order worth choosing. Recorded gestures
+// always play as a sequence; plain inputs get a together/in-order toggle.
 function updateSeqEditor() {
   const conn = editing && connections[editing];
   const box = els.ceSeq;
   const sibs = conn ? siblingsOf(conn.source) : [];
-  if (!conn || !isGestureSource(conn.source) || sibs.length < 2) {
+  if (!conn || sibs.length < 2) {
     box.classList.add("ce-seq--hidden");
     return;
   }
   box.classList.remove("ce-seq--hidden");
+  const gesture = isGestureSource(conn.source);
+  const sequenced = sourceSequenced(conn.source);
+  // Mode toggle only applies to plain inputs; gestures are always sequenced.
+  els.ceSeqMode.style.display = gesture ? "none" : "";
+  if (!gesture) {
+    const mode = seqConfig(conn.source).mode;
+    els.ceModeTogether.classList.toggle("is-active", mode === "together");
+    els.ceModeSeq.classList.toggle("is-active", mode === "sequence");
+  }
+  // Order + spacing only matter when the sounds play one after another.
+  els.ceSeqBody.style.display = sequenced ? "" : "none";
   const idx = sibs.indexOf(editing);
   els.ceSeqPos.textContent = `step ${idx + 1} / ${sibs.length}`;
   els.ceSeqUp.disabled = idx <= 0;
   els.ceSeqDown.disabled = idx >= sibs.length - 1;
-  const g = gestureBySource(conn.source);
-  const gap = g ? (g.seqGap ?? SEQ_GAP_DEFAULT) : SEQ_GAP_DEFAULT;
+  const gap = seqGapFor(conn.source);
   els.ceSeqGap.value = gap;
   els.ceSeqGapVal.textContent = gap;
+}
+
+// Switch a plain input between playing its instruments together vs. in order.
+function setSeqMode(mode) {
+  const conn = editing && connections[editing];
+  if (!conn || isGestureSource(conn.source)) return;
+  seqConfig(conn.source).mode = mode;
+  updateSeqEditor();
+  saveStateSoon();
 }
 
 function updateInstruments() {
@@ -1941,13 +2016,19 @@ async function init() {
   });
   els.ceDisconnect.addEventListener("click", () => { if (editing) disconnect(editing); });
   els.ceClose.addEventListener("click", closeEditor);
-  // Sequence controls (order within a movement's chain + step spacing).
+  // Playback controls (together vs. in-order, chain order + step spacing).
+  els.ceModeTogether.addEventListener("click", () => setSeqMode("together"));
+  els.ceModeSeq.addEventListener("click", () => setSeqMode("sequence"));
   els.ceSeqUp.addEventListener("click", () => { if (editing) { moveInSequence(editing, -1); updateSeqEditor(); } });
   els.ceSeqDown.addEventListener("click", () => { if (editing) { moveInSequence(editing, +1); updateSeqEditor(); } });
   els.ceSeqGap.addEventListener("input", () => {
     const conn = editing && connections[editing];
-    const g = conn && gestureBySource(conn.source);
-    if (g) { g.seqGap = +els.ceSeqGap.value; els.ceSeqGapVal.textContent = g.seqGap; persistGesturesSoon(); }
+    if (!conn) return;
+    const gap = +els.ceSeqGap.value;
+    els.ceSeqGapVal.textContent = gap;
+    const g = gestureBySource(conn.source);
+    if (g) { g.seqGap = gap; persistGesturesSoon(); }
+    else { seqConfig(conn.source).gap = gap; saveStateSoon(); }
   });
   // Click anywhere outside the editor / a cable closes it.
   window.addEventListener("pointerdown", (e) => {
@@ -2012,6 +2093,19 @@ async function init() {
     // Release any staggered steps of a movement's chain that are now due.
     for (let i = seqQueue.length - 1; i >= 0; i--) {
       if (now >= seqQueue[i].at) { seqEnv[seqQueue[i].instKey] = 1; seqQueue.splice(i, 1); }
+    }
+    // Plain inputs set to "in order" fire their chain on each rising onset, so
+    // e.g. a roll or tap plays its instruments one after another.
+    for (const source in seqCfg) {
+      if (seqCfg[source].mode !== "sequence") continue;
+      if (siblingsOf(source).length < 2) continue;
+      const val = paramValue(source);
+      const st = seqOnset[source] || (seqOnset[source] = { prev: 0, last: 0 });
+      if (st.prev < SEQ_ONSET_LO && val >= SEQ_ONSET_HI && now - st.last > SEQ_ONSET_COOLDOWN) {
+        st.last = now;
+        fireChain(source, seqCfg[source].gap);
+      }
+      st.prev = val;
     }
     const gfeat = featureVec();
     updateGestureActivity(now, dt, gfeat);

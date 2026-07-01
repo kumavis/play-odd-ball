@@ -571,6 +571,17 @@ body { display: flex; flex-direction: column; height: 100vh; }
   color: var(--accent-2); margin-bottom: 8px;
 }
 .ce-seq-head span { color: var(--text); font-weight: 700; }
+.ce-seq-mode { display: flex; gap: 6px; margin-bottom: 10px; }
+.ce-mode-btn {
+  flex: 1 1 0; font-size: 11px; font-weight: 600; cursor: pointer;
+  padding: 6px 4px; border-radius: 7px; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--line);
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.ce-mode-btn:hover { border-color: var(--accent-2); color: var(--accent-2); }
+.ce-mode-btn.is-active {
+  color: #061018; background: var(--accent-2); border-color: var(--accent-2);
+}
 .ce-seq-order { display: flex; gap: 6px; margin-bottom: 12px; }
 .ce-seq-btn {
   flex: 1 1 0; font-size: 11px; font-weight: 600; cursor: pointer;
