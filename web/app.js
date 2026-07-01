@@ -755,9 +755,7 @@ function updateRecMoveBtn() {
   els.recMove.classList.toggle("is-arming", !!rec);
   if (!rec) { els.recMove.textContent = "✋ Record move"; return; }
   const n = rec.examples.length;
-  els.recMove.textContent = n
-    ? `✋ ${n} captured · finish`
-    : (rec.targetId ? "✋ Do the move…" : "✋ Do the move…");
+  els.recMove.textContent = n ? `✋ ${n} captured · finish` : "✋ Do the move…";
 }
 
 function toggleRecordMove() {
