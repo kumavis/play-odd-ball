@@ -191,6 +191,13 @@ const GEST_ACT_TAU = 0.15;                // s; smoothing for the activity signa
 const SEG_START = 4.0;                    // activity (Σ|Δfeat|/s) that begins a move
 const SEG_END = 1.4;                      // activity under which the ball is "still"
 const SEG_HOLD = 400;                     // ms below SEG_END that ends a move
+// Recognition doesn't wait for SEG_HOLD: matching only ever uses frames up to
+// SEG_TAIL past the last activity, so once the ball has been still that long
+// the data is complete and we match immediately. SEG_HOLD still governs when
+// the segment *closes* (it exists so a brief mid-move pause doesn't split a
+// move in half, not because more data is coming).
+const SEG_TAIL = 120;                     // ms of trailing stillness kept in a move
+const SEG_EARLY_MS = SEG_TAIL;            // stillness before an early match attempt
 const SEG_PREROLL = 320;                  // ms of pre-motion frames folded into a move
 const SEG_MIN_MS = 260;                   // ignore twitches shorter than this
 const SEG_MAX = 4000;                     // ms cap on a single move
@@ -670,7 +677,7 @@ function handleSegment(now, feat) {
   if (!seg) {
     if ((recordingGesture || gestures.length) && act > SEG_START) {
       const lo = now - SEG_PREROLL;
-      seg = { frames: histFrames.filter((h) => h.t >= lo).slice(), peak: act };
+      seg = { frames: histFrames.filter((h) => h.t >= lo).slice(), peak: act, fired: false, triedUpTo: -1 };
       segLastActive = now;
     }
     return;
@@ -678,15 +685,35 @@ function handleSegment(now, feat) {
   seg.frames.push({ t: now, feat });
   if (act > seg.peak) seg.peak = act;
   if (act > SEG_END) segLastActive = now;
+
+  // Early recognition: after SEG_EARLY_MS of stillness the trailing window is
+  // full, so fire the match now instead of sitting out the rest of SEG_HOLD —
+  // this cuts move-end→sound latency from ~400ms to ~120ms. If the stillness
+  // was actually a mid-move pause, the segment keeps growing and (if nothing
+  // fired) gets one more attempt on the fuller data; a pause the player can
+  // see reads as the end of a move, and the per-move cooldown covers the rest.
+  // Recording is latency-insensitive and still captures on the full close.
+  if (!recordingGesture && !seg.fired && seg.triedUpTo !== segLastActive
+      && act <= SEG_END && now - segLastActive >= SEG_EARLY_MS) {
+    seg.triedUpTo = segLastActive;
+    const kept = seg.frames.filter((h) => h.t <= segLastActive + SEG_TAIL);
+    const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS && seg.peak >= SEG_PEAK_MIN) {
+      if (recognize(kept.map((h) => h.feat), durMs)) seg.fired = true;
+    }
+  }
+
   if (now - segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
-    const all = seg.frames;
-    const peak = seg.peak;
+    const done = seg;
     seg = null;
-    const kept = all.filter((h) => h.t <= segLastActive + 120);
+    // Already matched (or attempted) on exactly this data during the early
+    // pass and nothing new arrived since — don't fire or log a second time.
+    if (!recordingGesture && (done.fired || done.triedUpTo === segLastActive)) return;
+    const kept = done.frames.filter((h) => h.t <= segLastActive + SEG_TAIL);
     const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
     // Require a clear activity peak so drift that just grazes SEG_START then
     // fades is rejected rather than matched as a (garbage) move.
-    if (kept.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) {
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS && done.peak >= SEG_PEAK_MIN) {
       processSegment(kept.map((h) => h.feat), durMs);
     }
   }
@@ -728,10 +755,12 @@ function durationOk(g, durMs) {
       && durMs <= Math.max(...durs) * GEST_DUR_RATIO;
 }
 
+// Match a candidate against every move; returns the gesture that fired (or
+// null) so the segmenter can tell whether an early attempt landed.
 function recognize(frames, durMs) {
   const plain = resampleNorm(frames, GEST_N);
   let canon = null;   // built lazily: only when some move matches grip-invariantly
-  let best = null, second = null;
+  let best = null, second = null, fired = null;
   for (const g of gestures) {
     const norm = g.rotInvariant ? (canon ??= resampleNorm(frames, GEST_N, true)) : plain;
     const d = gestureDist(norm, g);
@@ -748,9 +777,11 @@ function recognize(frames, durMs) {
       logEvent(`<b>GESTURE</b> ambiguous — ${escHtml(best.g.name)} d=${best.d.toFixed(2)} vs ${escHtml(second.g.name)} d=${second.d.toFixed(2)} · not firing`, "note");
     } else {
       fireGesture(best.g, best.d);
+      fired = best.g;
     }
   }
   renderGestures();
+  return fired;
 }
 
 function fireGesture(g, d) {
