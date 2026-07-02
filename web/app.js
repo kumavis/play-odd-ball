@@ -113,10 +113,6 @@ const ROLL_CHANNELS = new Set([3, 4, 5]);
 // them (average) into the shared `cc` used by the parameters.
 const deviceCc = {};
 let rollAccum = 0;
-// Orientation/spin path length (normalized) accumulated from EVERY message, so
-// gesture activity & motion energy reflect fast motion instead of aliasing at
-// the animation frame rate. Drained each frame in updateGestureActivity.
-let featAccum = 0;
 let rollRate = 0;      // smoothed CC-units/sec on channels 3-5
 let rollSpeed = 0;     // final gated 0..1 intensity sent to the synth
 let rollRaw = 0;       // ungated normalized rate (0..1) for the meter
@@ -280,27 +276,37 @@ function fireChain(source, gap) {
   });
 }
 let recordingGesture = null;       // { name, targetId, examples[] } while armed to capture
-let seg = null;                    // { frames: [{t,feat}] } current motion segment
-let segLastActive = 0;
-let gestActivity = 0;              // smoothed Σ|Δfeat|/s
-const histFrames = [];             // recent { t, feat } ring, for segment pre-roll
+let gestActivity = 0;              // most active ball's smoothed Σ|Δfeat|/s (orb/motion display)
 const HIST_MS = 4000;
 
-const featureVec = () => GEST_DIMS.map((c) => (cc[c] ?? 0) / 127);
+// Per-device gesture pipelines. Each ball gets its own feature stream,
+// activity signal, history buffer and segmenter, keyed by input id — the
+// shared `cc` average is fine for sound routing, but a blended pose from two
+// balls is meaningless for recognition, and a second (even still) controller
+// would dilute the first one's motion. Any ball can trigger any move;
+// simultaneous triggers are de-duplicated by each move's cooldown. A pipe's
+// featAccum gathers orientation path length from EVERY message (drained each
+// frame) so fast motion keeps reading faster instead of aliasing at 60fps.
+const gestPipes = {};   // device id -> { featAccum, activity, hist, seg, segLastActive }
+const gestPipe = (id) =>
+  gestPipes[id] || (gestPipes[id] = { featAccum: 0, activity: 0, hist: [], seg: null, segLastActive: 0 });
+const clearGestPipes = () => { for (const id in gestPipes) delete gestPipes[id]; };
+const deviceFeature = (id) => GEST_DIMS.map((c) => ((deviceCc[id] || {})[c] ?? 0) / 127);
 
-// Track how fast the orientation is changing (framerate-independent) and keep a
-// short history buffer so a move's wind-up can be folded in as pre-roll.
-function updateGestureActivity(now, dt, feat) {
+// Track how fast one device's orientation is changing (framerate-independent)
+// and keep a short history buffer so a move's wind-up can be folded in as
+// pre-roll.
+function updateGestureActivity(pipe, now, dt, feat) {
   // Speed is the orientation path length per second gathered from every MIDI
   // message this frame (drained here). For smooth motion this equals the old
   // net-delta reading, so thresholds stay calibrated; for fast motion it keeps
   // climbing instead of aliasing down once the ball outruns the frame rate.
-  const speed = featAccum / dt;
-  featAccum = 0;
+  const speed = pipe.featAccum / dt;
+  pipe.featAccum = 0;
   const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
-  gestActivity += (speed - gestActivity) * a;
-  histFrames.push({ t: now, feat });
-  while (histFrames.length && now - histFrames[0].t > HIST_MS) histFrames.shift();
+  pipe.activity += (speed - pipe.activity) * a;
+  pipe.hist.push({ t: now, feat });
+  while (pipe.hist.length && now - pipe.hist[0].t > HIST_MS) pipe.hist.shift();
 }
 
 // Given [{t,feat}] frames, compute the same activity signal and return the feat
@@ -672,19 +678,20 @@ function dtwDist(a, b) {
 // SEG_START (pulling in ~SEG_PREROLL ms of preceding frames so the wind-up is
 // kept) and ends after SEG_HOLD ms back under SEG_END. Trailing stillness is
 // trimmed so a slow settle at the end doesn't skew the template.
-function handleSegment(now, feat) {
-  const act = gestActivity;
-  if (!seg) {
+function handleSegment(pipe, now, feat) {
+  const act = pipe.activity;
+  if (!pipe.seg) {
     if ((recordingGesture || gestures.length) && act > SEG_START) {
       const lo = now - SEG_PREROLL;
-      seg = { frames: histFrames.filter((h) => h.t >= lo).slice(), peak: act, fired: false, triedUpTo: -1 };
-      segLastActive = now;
+      pipe.seg = { frames: pipe.hist.filter((h) => h.t >= lo).slice(), peak: act, fired: false, triedUpTo: -1 };
+      pipe.segLastActive = now;
     }
     return;
   }
+  const seg = pipe.seg;
   seg.frames.push({ t: now, feat });
   if (act > seg.peak) seg.peak = act;
-  if (act > SEG_END) segLastActive = now;
+  if (act > SEG_END) pipe.segLastActive = now;
 
   // Early recognition: after SEG_EARLY_MS of stillness the trailing window is
   // full, so fire the match now instead of sitting out the rest of SEG_HOLD —
@@ -693,27 +700,26 @@ function handleSegment(now, feat) {
   // fired) gets one more attempt on the fuller data; a pause the player can
   // see reads as the end of a move, and the per-move cooldown covers the rest.
   // Recording is latency-insensitive and still captures on the full close.
-  if (!recordingGesture && !seg.fired && seg.triedUpTo !== segLastActive
-      && act <= SEG_END && now - segLastActive >= SEG_EARLY_MS) {
-    seg.triedUpTo = segLastActive;
-    const kept = seg.frames.filter((h) => h.t <= segLastActive + SEG_TAIL);
+  if (!recordingGesture && !seg.fired && seg.triedUpTo !== pipe.segLastActive
+      && act <= SEG_END && now - pipe.segLastActive >= SEG_EARLY_MS) {
+    seg.triedUpTo = pipe.segLastActive;
+    const kept = seg.frames.filter((h) => h.t <= pipe.segLastActive + SEG_TAIL);
     const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
     if (kept.length >= 6 && durMs >= SEG_MIN_MS && seg.peak >= SEG_PEAK_MIN) {
       if (recognize(kept.map((h) => h.feat), durMs)) seg.fired = true;
     }
   }
 
-  if (now - segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
-    const done = seg;
-    seg = null;
+  if (now - pipe.segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
+    pipe.seg = null;
     // Already matched (or attempted) on exactly this data during the early
     // pass and nothing new arrived since — don't fire or log a second time.
-    if (!recordingGesture && (done.fired || done.triedUpTo === segLastActive)) return;
-    const kept = done.frames.filter((h) => h.t <= segLastActive + SEG_TAIL);
+    if (!recordingGesture && (seg.fired || seg.triedUpTo === pipe.segLastActive)) return;
+    const kept = seg.frames.filter((h) => h.t <= pipe.segLastActive + SEG_TAIL);
     const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
     // Require a clear activity peak so drift that just grazes SEG_START then
     // fades is rejected rather than matched as a (garbage) move.
-    if (kept.length >= 6 && durMs >= SEG_MIN_MS && done.peak >= SEG_PEAK_MIN) {
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS && seg.peak >= SEG_PEAK_MIN) {
       processSegment(kept.map((h) => h.feat), durMs);
     }
   }
@@ -1009,7 +1015,8 @@ function toggleRecordMove() {
     `Move ${gestures.length + 1}`) || "").trim();
   if (!name) return;
   recordingGesture = { name, targetId: null, examples: [] };
-  seg = null; // start fresh; the next bursts of motion become the examples
+  // Start fresh; the next bursts of motion become the examples.
+  for (const id in gestPipes) gestPipes[id].seg = null;
   updateRecMoveBtn();
 }
 
@@ -1166,7 +1173,7 @@ function toggleAddExample() {
   if (!g) return;
   if (recordingGesture) { finishRecordMove(); return; }
   recordingGesture = { name: g.name, targetId: g.id, examples: [] };
-  seg = null;
+  for (const id in gestPipes) gestPipes[id].seg = null;
   updateRecMoveBtn();
   updateExampleAddBtn();
 }
@@ -2442,20 +2449,20 @@ function onMidiMessage(e) {
     if (d1 === 7) return;
     const id = (e.target && e.target.id) || "_";
     const dev = deviceCc[id] || (deviceCc[id] = {});
+    const prevDev = dev[d1];
     // Roll delta is measured within a single device only.
-    if (dev[d1] !== undefined && ROLL_CHANNELS.has(d1)) {
-      rollAccum += Math.abs(d2 - dev[d1]);
+    if (prevDev !== undefined && ROLL_CHANNELS.has(d1)) {
+      rollAccum += Math.abs(d2 - prevDev);
+    }
+    // Gesture path length is per-device too, measured against the device's own
+    // previous value — never the cross-device average, which would let a
+    // second controller dilute (or fake) this ball's motion.
+    if (prevDev !== undefined && GEST_CHANNELS.has(d1)) {
+      gestPipe(id).featAccum += Math.abs(d2 - prevDev) / 127;
     }
     dev[d1] = d2;
     // Merge this controller across all bound devices for the shared value.
-    const prevAgg = cc[d1];
     cc[d1] = aggregateCc(d1);
-    // Sum the true per-message change of each gesture feature (path length),
-    // not just the net frame-to-frame difference, so quick wiggles/spins keep
-    // reading faster instead of plateauing once motion outruns 60 fps sampling.
-    if (GEST_CHANNELS.has(d1) && prevAgg !== undefined) {
-      featAccum += Math.abs(cc[d1] - prevAgg) / 127;
-    }
     const row = ensureCcRow(d1);
     row.fill.style.width = `${(cc[d1] / 127) * 100}%`;
     row.val.textContent = Math.round(cc[d1]);
@@ -2493,8 +2500,8 @@ function syncActiveInputs() {
   activeInputs = [...selectedWebInputs, ...bleInputs];
   // Drop stale per-device state so a removed controller stops contributing.
   for (const k in deviceCc) delete deviceCc[k];
+  clearGestPipes();
   rollAccum = 0;
-  featAccum = 0;
   if (activeInputs.length === 0) { setStatus(false, "disconnected"); return; }
   setStatus(true, activeInputs.length > 1 ? `connected · ${activeInputs.length}` : "connected");
   els.hint.classList.add("hide");
@@ -2586,6 +2593,7 @@ function removeBleInput(id) {
   if (idx === -1) return;
   const [port] = bleInputs.splice(idx, 1);
   delete deviceCc[id];
+  delete gestPipes[id];
   syncActiveInputs();
   logEvent(`Bluetooth ball <b>${escHtml(port.name)}</b> disconnected`);
 }
@@ -2878,12 +2886,22 @@ async function init() {
       }
       st.prev = val;
     }
-    const gfeat = featureVec();
-    updateGestureActivity(now, dt, gfeat);
-    // Motion energy is the smoothed orientation-change speed, normalized 0..1.
+    // Per-device gesture pipelines: each ball runs its own activity signal and
+    // segmenter over its own feature stream.
+    let maxAct = 0;
+    for (const id in gestPipes) {
+      const pipe = gestPipes[id];
+      const feat = deviceFeature(id);
+      updateGestureActivity(pipe, now, dt, feat);
+      if (pipe.activity > maxAct) maxAct = pipe.activity;
+      handleSegment(pipe, now, feat);
+    }
+    // Motion energy is the smoothed orientation-change speed of the MOST
+    // active ball, normalized 0..1 — a second, still controller must not
+    // dilute the glow the way an averaged signal would.
+    gestActivity = maxAct;
     lastMotion = clamp1(gestActivity / MOTION_SCALE);
     audio.setMotion(lastMotion);
-    handleSegment(now, gfeat);
 
     updateInstruments();
     renderRoll();
