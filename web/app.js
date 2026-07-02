@@ -2,7 +2,14 @@
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = (n) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
+// The ball identifies the gesture by note number (see docs/MIDI.md).
+const NOTE_GESTURE = { 0: "Tap", 1: "Shake", 2: "Twist" };
+const NOTE_TAP = 0;
 const clamp1 = (v) => Math.max(0, Math.min(1, v));
+// Escape untrusted text (gesture/profile/device names, error messages) before
+// interpolating it into an HTML string.
+const escHtml = (s) => String(s).replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const els = {
   portSelect: document.getElementById("portSelect"),
@@ -211,6 +218,15 @@ const seqOnset = {};               // source -> { prev, last } rising-edge track
 const SEQ_ONSET_LO = 0.06;         // fall below this to re-arm the trigger
 const SEQ_ONSET_HI = 0.14;         // rise above this to fire the chain
 const SEQ_ONSET_COOLDOWN = 220;    // ms minimum between chain triggers
+
+// Drop queued chain steps, onset trackers and live trigger envelopes — called
+// when the patch is cleared or swapped so steps scheduled milliseconds earlier
+// can't fire into the new layout.
+function resetSeqRuntime() {
+  seqQueue.length = 0;
+  for (const k in seqOnset) delete seqOnset[k];
+  for (const k in seqEnv) delete seqEnv[k];
+}
 const isGestureSource = (src) => !!(PARAMS[src] && PARAMS[src].gesture);
 const gestureBySource = (src) =>
   (src && src.slice(0, 2) === "g:") ? gestures.find((g) => g.id === src.slice(2)) : null;
@@ -228,10 +244,15 @@ function seqConfig(source) {
 }
 
 // A source plays its instruments one-after-another when it's a recorded gesture
-// (always) or a plain input the user switched into "sequence" mode.
+// (always) or a plain input the user switched into "sequence" mode. A plain
+// input only counts as sequenced while it drives at least two instruments: the
+// onset loop never fires a chain for a lone instrument, so treating that case
+// as sequenced would leave it reading a trigger envelope that never rises —
+// i.e. permanently silent. With one instrument it plays continuously instead.
 function sourceSequenced(source) {
   if (isGestureSource(source)) return true;
-  return !!(seqCfg[source] && seqCfg[source].mode === "sequence");
+  if (!seqCfg[source] || seqCfg[source].mode !== "sequence") return false;
+  return siblingsOf(source).length >= 2;
 }
 
 function seqGapFor(source) {
@@ -254,7 +275,6 @@ let recordingGesture = null;       // { name, targetId, examples[] } while armed
 let seg = null;                    // { frames: [{t,feat}] } current motion segment
 let segLastActive = 0;
 let gestActivity = 0;              // smoothed Σ|Δfeat|/s
-let prevFeat = null;
 const histFrames = [];             // recent { t, feat } ring, for segment pre-roll
 const HIST_MS = 4000;
 
@@ -269,7 +289,6 @@ function updateGestureActivity(now, dt, feat) {
   // climbing instead of aliasing down once the ball outruns the frame rate.
   const speed = featAccum / dt;
   featAccum = 0;
-  prevFeat = feat;
   const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
   gestActivity += (speed - gestActivity) * a;
   histFrames.push({ t: now, feat });
@@ -590,7 +609,7 @@ function fireGesture(g, d) {
   // Trigger each connected instrument on its own envelope, staggered by the
   // move's spacing in play order, so the sounds fire as a sequence.
   fireChain("g:" + g.id, g.seqGap ?? SEQ_GAP_DEFAULT);
-  logEvent(`<b>GESTURE</b> ${g.name} matched · d=${d.toFixed(2)}`, "note");
+  logEvent(`<b>GESTURE</b> ${escHtml(g.name)} matched · d=${d.toFixed(2)}`, "note");
   const row = els.gestureList.querySelector(`.gesture[data-id="${g.id}"]`);
   if (row) { row.classList.add("is-hit"); setTimeout(() => row.classList.remove("is-hit"), 450); }
   if (editingGesture && editingGesture.id === g.id) {
@@ -663,7 +682,7 @@ function saveGesture(name, exampleFrames) {
   rebuildGraph();
   renderGestures();
   const n = examples.length;
-  logEvent(`<b>GESTURE</b> saved “${g.name}”${n > 1 ? ` · ${n} examples` : ""} — edit or wire it up`, "note");
+  logEvent(`<b>GESTURE</b> saved “${escHtml(g.name)}”${n > 1 ? ` · ${n} examples` : ""} — edit or wire it up`, "note");
   return g;
 }
 
@@ -787,7 +806,7 @@ function finishRecordMove() {
     const g = gestures.find((x) => x.id === rec.targetId);
     if (!g) { saveGesture(rec.name, rec.examples); return; }
     addExamplesToGesture(g, rec.examples);
-    logEvent(`<b>GESTURE</b> added ${rec.examples.length} example${rec.examples.length === 1 ? "" : "s"} to “${g.name}” · ${gestureExamples(g).length} total`, "note");
+    logEvent(`<b>GESTURE</b> added ${rec.examples.length} example${rec.examples.length === 1 ? "" : "s"} to “${escHtml(g.name)}” · ${gestureExamples(g).length} total`, "note");
     if (editingGesture && editingGesture.id === g.id) {
       editingExample = gestureExamples(g).length - 1;
       renderExampleStrip();
@@ -837,7 +856,7 @@ function renderGestures() {
     const nEx = gestureExamples(g).length;
     return `<div class="gesture" data-id="${g.id}">
       <span class="g-dot" style="background:${g.color}"></span>
-      <span class="g-name">${g.name}</span>
+      <span class="g-name">${escHtml(g.name)}</span>
       <span class="g-ex" title="${nEx} example${nEx === 1 ? "" : "s"} building this trigger">${nEx}×</span>
       <span class="g-dist">d ${dist}</span>
       <span class="g-sens-label">sensitivity</span>
@@ -1109,7 +1128,15 @@ function stopSessionRec() {
 // `atten` scales the result, so you can tune how sensitive each link is.
 //   shaped = ((raw - thresh) / (1 - thresh))  (clamped, 0 below thresh) * atten
 const INSTRUMENTS = [...AudioEngine.INSTRUMENTS, { key: "chimes", label: "Chimes" }];
-const mkConn = (source, atten = 1, thresh = 0) => ({ source, atten, thresh });
+// thresh is capped just under 1 (matching the UI slider's 0.95 max): shape()
+// divides by (1 - thresh), so a stored/imported value of exactly 1 would turn
+// the whole chain into NaN gain — and assigning NaN to an AudioParam throws.
+const CONN_THRESH_MAX = 0.95;
+const mkConn = (source, atten = 1, thresh = 0) => ({
+  source,
+  atten: clamp1(atten),
+  thresh: Math.min(CONN_THRESH_MAX, clamp1(thresh)),
+});
 // Every instrument starts unpatched; a couple get sensible defaults.
 const connections = {};
 INSTRUMENTS.forEach((inst) => { connections[inst.key] = null; });
@@ -1127,6 +1154,25 @@ function shape(conn, instKey) {
   const t = conn.thresh;
   const gated = raw <= t ? 0 : (raw - t) / (1 - t);
   return clamp1(gated) * conn.atten;
+}
+
+// Chimes are an event instrument (audio.hit), not a continuous voice, so a
+// connection can't just stream a level into them. A plain tap connection keeps
+// the zero-latency per-note path (true velocity, retriggers on every bounce);
+// any other source fires one chime per rising edge of its shaped value — which
+// also covers sequenced chains, whose per-instrument envelope jumps 0→1 when
+// the chain step lands.
+const chimeState = { prev: 0, last: 0 };
+const chimeDirect = (conn) => !!conn && conn.source === "tap" && !sourceSequenced("tap");
+function updateChimes(conn, v, now) {
+  if (!conn) { chimeState.prev = 0; return; }
+  if (!chimeDirect(conn)) {
+    if (chimeState.prev < SEQ_ONSET_LO && v >= SEQ_ONSET_HI && now - chimeState.last > SEQ_ONSET_COOLDOWN) {
+      chimeState.last = now;
+      audio.hit(Math.round(clamp1(v) * 127), (cc[3] ?? 64) / 127);
+    }
+  }
+  chimeState.prev = v;
 }
 
 // ---- Persistence: patch config + settings survive a reload ---------------
@@ -1308,7 +1354,7 @@ function saveCurrentProfile() {
   writeProfiles();
   renderProfiles();
   setView("profiles", true);
-  logEvent(`<b>PROFILE</b> saved “${name}”`, "note");
+  logEvent(`<b>PROFILE</b> saved “${escHtml(name)}”`, "note");
 }
 
 function applyProfile(id) {
@@ -1319,6 +1365,7 @@ function applyProfile(id) {
 
   // Clear the current patch (removes cables) and swap the moves wholesale.
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
   for (const g of gestures.slice()) unregisterGestureParam(g.id);
   gestures = (Array.isArray(profile.gestures) ? profile.gestures : [])
     .map(gestureFromData).filter(Boolean);
@@ -1359,7 +1406,7 @@ function applyProfile(id) {
   refreshConnectionStyles();
   renderGestures();
   saveState();
-  logEvent(`<b>PROFILE</b> loaded “${profile.name}”`, "note");
+  logEvent(`<b>PROFILE</b> loaded “${escHtml(profile.name)}”`, "note");
 }
 
 function deleteProfile(id) {
@@ -1470,7 +1517,7 @@ let histCtx = null;
 
 function buildHistLegend() {
   els.histLegend.innerHTML = Object.keys(PARAMS).map((k) =>
-    `<span class="item"><span class="sw" style="background:${PARAMS[k].color}"></span>${PARAMS[k].label}</span>`
+    `<span class="item"><span class="sw" style="background:${PARAMS[k].color}"></span>${escHtml(PARAMS[k].label)}</span>`
   ).join("");
 }
 
@@ -1561,7 +1608,7 @@ function buildGraph() {
   srcKeys.forEach((key) => {
     const { node, port } = makeNode(
       "gnode--src",
-      `<span class="glabel">${PARAMS[key].label}</span><canvas class="spark"></canvas><span class="gval"></span>`,
+      `<span class="glabel">${escHtml(PARAMS[key].label)}</span><canvas class="spark"></canvas><span class="gval"></span>`,
       "gport--out"
     );
     port.dataset.port = "out";
@@ -1719,7 +1766,9 @@ async function previewInstrument(key, btn) {
   } else if (audio.ctx.state === "suspended") {
     await audio.ctx.resume();
     // Global sound is off: re-suspend after the demo finishes so we honor it.
-    if (!audio.enabled) setTimeout(() => { if (!audio.enabled) audio.ctx.suspend(); }, 1800);
+    // The demo swell is 1.3s but event voices ring on — lightning's rolling
+    // thunder tail lasts ~3.6s past its trigger — so leave room for the decay.
+    if (!audio.enabled) setTimeout(() => { if (!audio.enabled) audio.ctx.suspend(); }, 5000);
   }
   audio.preview(key);
   if (btn) {
@@ -1731,6 +1780,7 @@ async function previewInstrument(key, btn) {
 // Disconnect every instrument from its trigger — a clean slate.
 function clearPatch() {
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
   closeEditor();
   refreshConnectionStyles();
   saveStateSoon();
@@ -1741,6 +1791,7 @@ function clearPatch() {
 // result is playable rather than a wall of sound.
 function randomizePatch() {
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
   const paramKeys = Object.keys(PARAMS);
   const insts = INSTRUMENTS.slice();
   for (let i = insts.length - 1; i > 0; i--) {           // Fisher–Yates shuffle
@@ -1927,10 +1978,12 @@ function setSeqMode(mode) {
 
 function updateInstruments() {
   const svg = document.getElementById("graphSvg");
+  const now = performance.now();
   for (const inst of INSTRUMENTS) {
     const conn = connections[inst.key];
     const v = shape(conn, inst.key);
     if (inst.key !== "chimes") audio.setVoice(inst.key, v);
+    else updateChimes(conn, v, now);
 
     // Draw / update the cable for this instrument's connection.
     let c = graph.cables[inst.key];
@@ -2128,21 +2181,32 @@ function initViews() {
 
 function onMidiMessage(e) {
   const [status, d1, d2] = e.data;
+  // System-realtime housekeeping (clock, active sensing) isn't musical data;
+  // keep it out of the msg/s rate, the same way listen.py ignores it.
+  if (status >= 0xf8) return;
   const type = status & 0xf0;
   msgCount++;
 
   if (type === 0x90 && d2 > 0) {            // note on
-    tapEnv = Math.max(tapEnv, d2 / 127);
+    const gesture = NOTE_GESTURE[d1];
+    // Shake (note 1) and Twist (note 2) already report through CC0/CC1, so
+    // only a Tap drives the tap envelope and the chimes — otherwise a vigorous
+    // shake double-triggers as both a shake and a fake tap. Unknown notes are
+    // treated as taps so a firmware with a remapped note table keeps working.
+    const isTap = gesture === undefined || d1 === NOTE_TAP;
+    if (isTap) tapEnv = Math.max(tapEnv, d2 / 127);
     els.lastNote.textContent = noteName(d1);
-    els.lastNoteSub.textContent = `note ${d1} · velocity ${d2}`;
+    els.lastNoteSub.textContent = `note ${d1} · velocity ${d2}${gesture ? ` · ${gesture.toLowerCase()}` : ""}`;
     els.orb.animate(
       [{ filter: "brightness(2.2)" }, { filter: "brightness(1)" }],
       { duration: 320, easing: "ease-out" }
     );
     spawnRipple(d2);
-    // Pitch follows X orientation (CC3) so moving the ball plays different notes.
-    audio.hit(d2, (cc[3] ?? 64) / 127);
-    logEvent(`<b>NOTE</b> ${noteName(d1)} (${d1}) vel ${d2}`, "note");
+    // Pitch follows X orientation (CC3) so moving the ball plays different
+    // notes. Only the direct tap→chimes patch fires from here; other sources
+    // trigger chimes from their own value edges in updateChimes.
+    if (isTap && chimeDirect(connections.chimes)) audio.hit(d2, (cc[3] ?? 64) / 127);
+    logEvent(`<b>NOTE</b> ${noteName(d1)} (${d1}) vel ${d2}${gesture ? ` · ${gesture}` : ""}`, "note");
   } else if (type === 0x80 || (type === 0x90 && d2 === 0)) {  // note off
     // (Quiet in the log to avoid clutter.)
   } else if (type === 0xb0) {               // control change
@@ -2193,7 +2257,7 @@ function bindInputs(inputs) {
   selectedWebInputs = inputs;
   for (const inp of inputs) inp.onmidimessage = onMidiMessage;
   syncActiveInputs();
-  if (inputs.length) logEvent(`listening on <b>${inputs.map((i) => i.name).join(", ")}</b>`);
+  if (inputs.length) logEvent(`listening on <b>${escHtml(inputs.map((i) => i.name).join(", "))}</b>`);
 }
 
 // Recompute the combined active-input list (Web MIDI selection + BLE balls) and
@@ -2296,7 +2360,7 @@ function removeBleInput(id) {
   const [port] = bleInputs.splice(idx, 1);
   delete deviceCc[id];
   syncActiveInputs();
-  logEvent(`Bluetooth ball <b>${port.name}</b> disconnected`);
+  logEvent(`Bluetooth ball <b>${escHtml(port.name)}</b> disconnected`);
 }
 
 async function connectBluetoothBall() {
@@ -2316,7 +2380,7 @@ async function connectBluetoothBall() {
   } catch (err) {
     if (err && err.name === "NotFoundError") return;  // user dismissed the chooser
     els.hint.classList.remove("hide");
-    els.hint.innerHTML = `<p><strong>Bluetooth pairing failed.</strong> ${err}</p>`;
+    els.hint.innerHTML = `<p><strong>Bluetooth pairing failed.</strong> ${escHtml(err)}</p>`;
     return;
   }
   const id = `ble:${device.id}`;
@@ -2328,18 +2392,21 @@ async function connectBluetoothBall() {
     const char = await service.getCharacteristic(BLE_MIDI_CHAR);
     const port = { id, name: device.name || "ODD Ball (BLE)", device };
     char.addEventListener("characteristicvaluechanged", (ev) => {
-      const bytes = new Uint8Array(ev.target.value.buffer);
+      // The characteristic value is a DataView that need not span its whole
+      // ArrayBuffer — honor its offset/length or the packet bytes are wrong.
+      const v = ev.target.value;
+      const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
       for (const msg of decodeBleMidi(bytes)) onMidiMessage({ data: msg, target: port });
     });
     device.addEventListener("gattserverdisconnected", () => removeBleInput(id));
     await char.startNotifications();
     bleInputs.push(port);
     syncActiveInputs();
-    logEvent(`Bluetooth ball <b>${port.name}</b> connected`, "note");
+    logEvent(`Bluetooth ball <b>${escHtml(port.name)}</b> connected`, "note");
   } catch (err) {
     try { device.gatt && device.gatt.disconnect(); } catch (_) {}
     els.hint.classList.remove("hide");
-    els.hint.innerHTML = `<p><strong>Bluetooth connect failed.</strong> ${err}</p>`;
+    els.hint.innerHTML = `<p><strong>Bluetooth connect failed.</strong> ${escHtml(err)}</p>`;
     syncActiveInputs();
   }
 }
@@ -2522,7 +2589,7 @@ async function init() {
       els.portSelect.addEventListener("change", (e) => applySelection(e.target.value));
     } catch (err) {
       setStatus(false, "permission denied");
-      els.hint.innerHTML = `<p><strong>MIDI permission denied.</strong> Reload and allow MIDI access. (${err})</p>`;
+      els.hint.innerHTML = `<p><strong>MIDI permission denied.</strong> Reload and allow MIDI access. (${escHtml(err)})</p>`;
     }
   }
 
@@ -2538,8 +2605,11 @@ async function init() {
     lastFrame = now;
     // Average the per-device roll motion so binding N balls doesn't inflate
     // the rate N-fold (which would peg roll speed with several controllers).
-    const nDev = Math.max(1, activeInputs.length);
-    const changePerSec = (rollAccum / nDev) / dt;  // CC units/second on channels 4-6
+    // Count devices that have actually sent CCs, not every bound port — a
+    // silent extra input (IAC bus, keyboard) must not halve the rate and
+    // effectively raise the gate on the one ball that is really rolling.
+    const nDev = Math.max(1, Object.keys(deviceCc).length);
+    const changePerSec = (rollAccum / nDev) / dt;  // CC units/second on channels 3-5
     rollAccum = 0;
     // The ball sends CC4-6 in tight bursts, so the per-frame rate is very
     // spiky. Use a time-weighted EMA (framerate-independent) so the smoothed
