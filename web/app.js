@@ -652,12 +652,43 @@ function unregisterGestureParam(id) {
   }
 }
 
+// With two or more real examples we can measure the move's own run-to-run
+// spread: leave each example out in turn and score it against the templates
+// built from the rest — exactly how a genuine performance will be scored at
+// recognition time. The threshold then sits a comfortable margin above that
+// spread instead of at a one-size-fits-all default: tight, repeatable moves
+// get a strict threshold, sloppy expressive ones a loose one. A hand-moved
+// sensitivity slider flips the move to manual and wins from then on.
+function autoThreshold(g) {
+  const exs = gestureExamples(g);
+  if (exs.length < 2) return null;
+  const dists = [];
+  for (let i = 0; i < exs.length; i++) {
+    const probe = makeTemplate(exs[i].raw, exs[i].crop);
+    let best = Infinity;
+    for (const t of buildTemplates(exs.filter((_, j) => j !== i))) {
+      const d = dtwDist(probe, t);
+      if (d < best) best = d;
+    }
+    if (Number.isFinite(best)) dists.push(best);
+  }
+  if (!dists.length) return null;
+  const mean = dists.reduce((a, b) => a + b, 0) / dists.length;
+  const worst = Math.max(...dists);
+  // Enough headroom that a typical rep clears comfortably, without opening the
+  // door to everything: 1.6× the mean spread, or 1.2× the worst rep if larger.
+  return Math.min(GEST_THRESH_MAX, Math.max(GEST_THRESH_MIN, Math.max(mean * 1.6, worst * 1.2)));
+}
+
 // Recompute a gesture's derived templates from its current examples (called
-// after adding, deleting, or re-cropping an example).
+// after adding, deleting, or re-cropping an example) and — unless the user has
+// taken manual control of the slider — recalibrate its match threshold.
 function refreshGestureTemplates(g) {
   const exs = gestureExamples(g);
   g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
   g.templates = buildTemplates(exs);
+  const auto = autoThreshold(g);
+  if (auto !== null && !g.thresholdManual) g.threshold = auto;
 }
 
 // Create a move from one or more example captures (each a list of raw 0..1
@@ -707,7 +738,8 @@ function deleteGesture(id) {
 function serializeGestures() {
   return gestures.map((g) => ({
     id: g.id, name: g.name, color: g.color,
-    threshold: g.threshold, cooldown: g.cooldown, seqGap: g.seqGap,
+    threshold: g.threshold, thresholdManual: !!g.thresholdManual,
+    cooldown: g.cooldown, seqGap: g.seqGap,
     examples: gestureExamples(g).map((ex) => ({
       crop: ex.crop,
       raw: ex.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
@@ -749,6 +781,11 @@ function gestureFromData(g) {
     id: g.id, name: g.name || "Move",
     color: g.color || GEST_PALETTE[0],
     threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
+    // Entries saved before auto-calibration have no flag; a stored threshold
+    // that differs from the old default means the user moved the slider.
+    thresholdManual: typeof g.thresholdManual === "boolean"
+      ? g.thresholdManual
+      : typeof g.threshold === "number" && Math.abs(g.threshold - GEST_THRESH_DEFAULT) > 1e-6,
     cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
     seqGap: typeof g.seqGap === "number" ? g.seqGap : SEQ_GAP_DEFAULT,
     examples,
@@ -966,6 +1003,10 @@ function deleteEditingExample() {
 function updateEditorSettingLabels() {
   const g = editingGesture;
   if (!g) return;
+  // Keep the slider in step: auto-calibration can move the threshold whenever
+  // the examples change (the round-trip through threshToSens is exact, so this
+  // never fights the user's own drag).
+  els.geSens.value = threshToSens(g.threshold);
   els.geSensVal.textContent = threshToSens(g.threshold);
   els.geCoolVal.textContent = `${Math.round(g.cooldown || 500)} ms`;
   els.geThreshShow.textContent = g.threshold.toFixed(2);
@@ -2472,7 +2513,7 @@ async function init() {
     const sl = e.target.closest(".g-sens");
     if (!sl) return;
     const g = gestures.find((x) => x.id === sl.dataset.id);
-    if (g) { g.threshold = sensToThresh(+sl.value); persistGestures(); if (editingGesture === g) updateEditorSettingLabels(); }
+    if (g) { g.threshold = sensToThresh(+sl.value); g.thresholdManual = true; persistGestures(); if (editingGesture === g) updateEditorSettingLabels(); }
   });
   els.gestureList.addEventListener("click", (e) => {
     const del = e.target.closest(".g-del");
@@ -2495,6 +2536,7 @@ async function init() {
   els.geSens.addEventListener("input", () => {
     if (!editingGesture) return;
     editingGesture.threshold = sensToThresh(+els.geSens.value);
+    editingGesture.thresholdManual = true;
     updateEditorSettingLabels(); renderGestures(); persistGesturesSoon();
   });
   els.geCool.addEventListener("input", () => {
