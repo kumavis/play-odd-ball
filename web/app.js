@@ -300,7 +300,8 @@ function updateGestureActivity(now, dt, feat) {
 // when importing a recorded session so a saved move matches what the live
 // segmenter would have captured.
 function activeRegion(frames) {
-  if (frames.length < 3) return frames.map((f) => f.feat);
+  const span = frames.length ? frames[frames.length - 1].t - frames[0].t : 0;
+  if (frames.length < 3) return { rows: frames.map((f) => f.feat), durMs: span };
   let ema = 0, firstT = null, lastT = null;
   for (let i = 0; i < frames.length; i++) {
     const dt = i ? Math.max(0.001, (frames[i].t - frames[i - 1].t) / 1000) : 0.05;
@@ -310,9 +311,9 @@ function activeRegion(frames) {
     ema += (speed - ema) * a;
     if (ema > SEG_END) { if (firstT === null) firstT = frames[i].t; lastT = frames[i].t; }
   }
-  if (firstT === null) return frames.map((f) => f.feat);
+  if (firstT === null) return { rows: frames.map((f) => f.feat), durMs: span };
   const lo = firstT - SEG_PREROLL, hi = lastT + 120;
-  return frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
+  return { rows: frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat), durMs: lastT - firstT };
 }
 
 // Split a recorded session into EVERY distinct move it contains, using the same
@@ -347,14 +348,14 @@ function activeRegions(frames) {
     const lo = startT - SEG_PREROLL, hi = lastActive + 120;
     const rows = frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
     const durMs = lastActive - startT;
-    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) regions.push(rows);
+    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) regions.push({ rows, durMs });
     // Advance past the rest of this burst before scanning for the next start.
     i = j + 1;
     while (i < n && act[i] > SEG_END) i++;
   }
   if (!regions.length) {
     const one = activeRegion(frames);
-    if (one.length >= 6) regions.push(one);
+    if (one.rows.length >= 6) regions.push(one);
   }
   return regions;
 }
@@ -413,9 +414,9 @@ const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
 // region. Storing several real examples (repeat the move, or crop several reps
 // out of one recording) makes matching far more robust than re-cropping a single
 // take, because it captures the genuine run-to-run variation of the gesture.
-function makeExample(rawFrames) {
-  const raw = resample(rawFrames, RAW_N);
-  return { raw, crop: autoTrim(raw) };
+function makeExample(ex) {
+  const raw = resample(ex.rows, RAW_N);
+  return { raw, crop: autoTrim(raw), durMs: typeof ex.durMs === "number" && ex.durMs > 0 ? ex.durMs : null };
 }
 
 // Coerce whatever is stored on a gesture into a clean, non-empty examples list.
@@ -571,22 +572,22 @@ function handleSegment(now, feat) {
     // Require a clear activity peak so drift that just grazes SEG_START then
     // fades is rejected rather than matched as a (garbage) move.
     if (kept.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) {
-      processSegment(kept.map((h) => h.feat));
+      processSegment(kept.map((h) => h.feat), durMs);
     }
   }
 }
 
-function processSegment(frames) {
+function processSegment(frames, durMs) {
   if (recordingGesture) {
     // Each completed burst is one example. We keep capturing until the user
     // clicks to finish, so one recording session can gather several reps that
     // together build a more reliable trigger.
-    recordingGesture.examples.push(frames);   // frames are raw 0..1 rows
+    recordingGesture.examples.push({ rows: frames, durMs });   // raw 0..1 rows
     updateRecMoveBtn();
     if (recordingGesture.targetId) updateExampleAddBtn();
     logEvent(`<b>GESTURE</b> captured example ${recordingGesture.examples.length} — repeat or finish`, "note");
   } else {
-    recognize(resampleNorm(frames, GEST_N));
+    recognize(frames, durMs);
   }
 }
 
@@ -597,11 +598,28 @@ function processSegment(frames) {
 // never a plausible alternative.
 const GEST_MARGIN = 0.05;
 
-function recognize(norm) {
+// DTW plus fixed-length resampling deliberately erase tempo — but that means a
+// slow sweep and a quick flick with the same shape are otherwise identical.
+// Compare the candidate's wall-clock duration against the range seen across
+// the move's examples; the factor is loose (2×) since DTW already absorbs
+// local timing and honest reps vary. Examples saved before durations were
+// recorded have none, so legacy moves skip the gate.
+const GEST_DUR_RATIO = 2;
+function durationOk(g, durMs) {
+  if (!(durMs > 0)) return true;
+  const durs = gestureExamples(g).map((ex) => ex.durMs).filter((d) => typeof d === "number" && d > 0);
+  if (!durs.length) return true;
+  return durMs >= Math.min(...durs) / GEST_DUR_RATIO
+      && durMs <= Math.max(...durs) * GEST_DUR_RATIO;
+}
+
+function recognize(frames, durMs) {
+  const norm = resampleNorm(frames, GEST_N);
   let best = null, second = null;
   for (const g of gestures) {
     const d = gestureDist(norm, g);
-    g._dist = d;
+    g._dist = d;    // shown in the list/editor even when the duration gate skips it
+    if (!durationOk(g, durMs)) continue;
     if (!best || d < best.d) { second = best; best = { g, d }; }
     else if (!second || d < second.d) second = { g, d };
   }
@@ -708,12 +726,12 @@ function refreshGestureTemplates(g) {
   if (auto !== null && !g.thresholdManual) g.threshold = auto;
 }
 
-// Create a move from one or more example captures (each a list of raw 0..1
-// feature rows). Passing several examples — repeated live or cropped out of one
-// recording — builds a more robust trigger than a single take.
-function saveGesture(name, exampleFrames) {
-  const examples = (Array.isArray(exampleFrames[0]?.[0]) ? exampleFrames : [exampleFrames])
-    .map(makeExample);
+// Create a move from one or more example captures (each { rows, durMs }, where
+// rows is the raw 0..1 feature rows of one performance). Passing several
+// examples — repeated live or cropped out of one recording — builds a more
+// robust trigger than a single take.
+function saveGesture(name, exampleCaptures) {
+  const examples = exampleCaptures.map(makeExample);
   const g = {
     id: "g" + Date.now().toString(36),
     name: name || `Move ${gestures.length + 1}`,
@@ -734,9 +752,9 @@ function saveGesture(name, exampleFrames) {
   return g;
 }
 
-// Append example captures (lists of raw rows) to an existing move and rebuild.
-function addExamplesToGesture(g, exampleFrames) {
-  for (const frames of exampleFrames) g.examples.push(makeExample(frames));
+// Append example captures ({ rows, durMs } each) to an existing move and rebuild.
+function addExamplesToGesture(g, exampleCaptures) {
+  for (const ex of exampleCaptures) g.examples.push(makeExample(ex));
   refreshGestureTemplates(g);
   persistGestures();
   renderGestures();
@@ -759,6 +777,7 @@ function serializeGestures() {
     cooldown: g.cooldown, seqGap: g.seqGap,
     examples: gestureExamples(g).map((ex) => ({
       crop: ex.crop,
+      durMs: typeof ex.durMs === "number" ? Math.round(ex.durMs) : undefined,
       raw: ex.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
     })),
   }));
@@ -774,7 +793,8 @@ function exampleFromData(e) {
     ? { start: Math.max(0, Math.min(RAW_N - 1, e.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, e.crop.end)) }
     : { start: 0, end: RAW_N - 1 };
   if (crop.end <= crop.start) crop = { start: 0, end: RAW_N - 1 };
-  return { raw, crop };
+  const durMs = typeof e.durMs === "number" && e.durMs > 0 ? e.durMs : null;
+  return { raw, crop, durMs };
 }
 
 // Rebuild a full gesture (with computed templates) from stored/profile data.
