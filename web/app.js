@@ -590,14 +590,31 @@ function processSegment(frames) {
   }
 }
 
+// A winner must beat the runner-up by this much (avg per-step DTW distance)
+// whenever the runner-up could itself have fired — a near-tie between two
+// armed moves is genuinely ambiguous, and firing a coin-flip winner reads as
+// random misfires. Runners-up over their own threshold don't block: they were
+// never a plausible alternative.
+const GEST_MARGIN = 0.05;
+
 function recognize(norm) {
-  let best = null;
+  let best = null, second = null;
   for (const g of gestures) {
     const d = gestureDist(norm, g);
     g._dist = d;
-    if (!best || d < best.d) best = { g, d };
+    if (!best || d < best.d) { second = best; best = { g, d }; }
+    else if (!second || d < second.d) second = { g, d };
   }
-  if (best && best.d <= best.g.threshold) fireGesture(best.g, best.d);
+  if (best && best.d <= best.g.threshold) {
+    const ambiguous = !!second
+      && second.d - best.d < GEST_MARGIN
+      && second.d <= second.g.threshold;
+    if (ambiguous) {
+      logEvent(`<b>GESTURE</b> ambiguous — ${escHtml(best.g.name)} d=${best.d.toFixed(2)} vs ${escHtml(second.g.name)} d=${second.d.toFixed(2)} · not firing`, "note");
+    } else {
+      fireGesture(best.g, best.d);
+    }
+  }
   renderGestures();
 }
 
