@@ -60,6 +60,7 @@ const els = {
   geCropReset: document.getElementById("geCropReset"),
   geSens: document.getElementById("geSens"),
   geSensVal: document.getElementById("geSensVal"),
+  geRot: document.getElementById("geRot"),
   geCool: document.getElementById("geCool"),
   geCoolVal: document.getElementById("geCoolVal"),
   geDist: document.getElementById("geDist"),
@@ -406,7 +407,111 @@ function normalizeShared(rows) {
   return out;
 }
 
-const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
+// ---- Grip-invariant (rotation-canonical) matching -------------------------
+// The orientation axes the ball reports depend on how it sits in the hand: the
+// same physical move gripped 90° differently traces different CC3–5 curves and
+// won't match an axis-locked template. When a move opts in (rotInvariant), its
+// templates and each candidate are first rotated into a canonical frame — the
+// trajectory's own principal axes — so any fixed re-orientation of the ball
+// cancels out. PCA leaves each axis's sign ambiguous, and no per-trajectory
+// sign heuristic is stable for near-symmetric moves (a rep and its twin can
+// land in opposite-sign frames), so matching takes the best distance over the
+// four PROPER sign flips (det +1) of the candidate instead of trusting a
+// heuristic. Improper (mirror) flips are excluded, so a move and its mirror
+// image (clockwise vs counter-clockwise circles) stay distinct. The tradeoff:
+// distinct moves that are pure rotations of one another (tilt-left vs
+// tilt-forward) become identical — which is why this is per-move opt-in, not
+// the default. (Residual limitation: when two principal variances are nearly
+// equal the axis *order* can also swap between reps; multiple examples cover
+// that in practice.)
+
+// Jacobi eigen-decomposition of a symmetric 3×3 matrix (plenty of precision
+// for PCA over ≤96 rows; converges in a few sweeps).
+function eigSym3(A) {
+  const a = A.map((r) => r.slice());
+  const V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let iter = 0; iter < 24; iter++) {
+    let p = 0, q = 1, mx = Math.abs(a[0][1]);
+    if (Math.abs(a[0][2]) > mx) { p = 0; q = 2; mx = Math.abs(a[0][2]); }
+    if (Math.abs(a[1][2]) > mx) { p = 1; q = 2; mx = Math.abs(a[1][2]); }
+    if (mx < 1e-12) break;
+    const phi = 0.5 * Math.atan2(2 * a[p][q], a[p][p] - a[q][q]);
+    const c = Math.cos(phi), s = Math.sin(phi);
+    for (let k = 0; k < 3; k++) {           // A ← A·R
+      const akp = a[k][p], akq = a[k][q];
+      a[k][p] = c * akp + s * akq;
+      a[k][q] = -s * akp + c * akq;
+    }
+    for (let k = 0; k < 3; k++) {           // A ← Rᵀ·A
+      const apk = a[p][k], aqk = a[q][k];
+      a[p][k] = c * apk + s * aqk;
+      a[q][k] = -s * apk + c * aqk;
+    }
+    for (let k = 0; k < 3; k++) {           // V ← V·R
+      const vkp = V[k][p], vkq = V[k][q];
+      V[k][p] = c * vkp + s * vkq;
+      V[k][q] = -s * vkp + c * vkq;
+    }
+  }
+  return { values: [a[0][0], a[1][1], a[2][2]], vectors: [0, 1, 2].map((i) => [V[0][i], V[1][i], V[2][i]]) };
+}
+
+const det3 = (m) =>
+  m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+  - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+  + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+
+// Rotate a trajectory into its canonical frame: principal axes ordered by
+// variance, each axis's sign fixed by the trajectory's skew along it (falling
+// back to its largest excursion when the skew is negligible).
+function canonicalize(rows) {
+  const N = rows.length;
+  if (N < 3 || rows[0].length !== 3) return rows.map((r) => r.slice());
+  const mean = [0, 0, 0];
+  for (const r of rows) for (let d = 0; d < 3; d++) mean[d] += r[d];
+  for (let d = 0; d < 3; d++) mean[d] /= N;
+  const X = rows.map((r) => [r[0] - mean[0], r[1] - mean[1], r[2] - mean[2]]);
+  const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (const r of X) for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) C[i][j] += r[i] * r[j];
+  for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) { C[i][j] /= N; C[j][i] = C[i][j]; }
+  const eig = eigSym3(C);
+  const order = [0, 1, 2].sort((i, j) => eig.values[j] - eig.values[i]);
+  const axes = order.map((i) => eig.vectors[i]);
+  const P = X.map((r) => axes.map((e) => r[0] * e[0] + r[1] * e[1] + r[2] * e[2]));
+  const signs = [1, 1, 1], conf = [0, 0, 0];
+  for (let d = 0; d < 3; d++) {
+    let cube = 0, ext = 0;
+    for (const r of P) { cube += r[d] ** 3; if (Math.abs(r[d]) > Math.abs(ext)) ext = r[d]; }
+    const ref = Math.abs(cube) > 1e-9 ? cube : ext;
+    signs[d] = ref < 0 ? -1 : 1;
+    conf[d] = Math.abs(cube) + Math.abs(ext) ** 3;   // how sure we are of this sign
+  }
+  // Allow proper rotations only: mirroring would conflate a move with its
+  // reflection. If the transform came out improper, undo the flip we are
+  // least confident about.
+  const M = axes.map((e, d) => e.map((v) => v * signs[d]));
+  if (det3(M) < 0) {
+    let w = 0;
+    if (conf[1] < conf[w]) w = 1;
+    if (conf[2] < conf[w]) w = 2;
+    signs[w] *= -1;
+  }
+  for (const r of P) for (let d = 0; d < 3; d++) r[d] *= signs[d];
+  return P;
+}
+
+const resampleNorm = (frames, N, invariant = false) => {
+  const rows = resample(frames, N);
+  return normalizeShared(invariant ? canonicalize(rows) : rows);
+};
+
+// The four proper (det +1) sign flips of a canonical trajectory. Two canonical
+// forms of the same physical move can differ by exactly one of these, so
+// grip-invariant matching minimizes over them rather than trusting the
+// per-trajectory sign choice.
+const PROPER_FLIPS = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+const properFlips = (rows) =>
+  PROPER_FLIPS.map((s) => rows.map((r) => [r[0] * s[0], r[1] * s[1], r[2] * s[2]]));
 
 // A move is built from one or more EXAMPLES — real captures of the performance.
 // Each example keeps its raw 0..1 capture (resampled to RAW_N so storage is
@@ -424,9 +529,9 @@ function gestureExamples(g) {
   return (g && Array.isArray(g.examples) && g.examples.length) ? g.examples : [];
 }
 
-function makeTemplate(raw, crop) {
+function makeTemplate(raw, crop, invariant = false) {
   const a = raw.slice(crop.start, crop.end + 1);
-  return resampleNorm(a.length >= 2 ? a : raw, GEST_N);
+  return resampleNorm(a.length >= 2 ? a : raw, GEST_N, invariant);
 }
 
 // Build SEVERAL DTW templates for ONE example by cropping the capture a few
@@ -437,7 +542,7 @@ function makeTemplate(raw, crop) {
 // registers. When a move has several real examples the extra head/tail windows
 // add little (the real reps already span that variation), so `wide` is dropped
 // to keep the template count — and the per-match cost — bounded.
-function makeTemplates(raw, crop, wide = true) {
+function makeTemplates(raw, crop, wide = true, invariant = false) {
   const n = raw.length;
   const span = Math.max(2, crop.end - crop.start);
   const p = (f) => Math.round(span * f);
@@ -460,7 +565,7 @@ function makeTemplates(raw, crop, wide = true) {
     const key = s + "-" + e;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(resampleNorm(raw.slice(s, e + 1), GEST_N));
+    out.push(resampleNorm(raw.slice(s, e + 1), GEST_N, invariant));
   }
   return out;
 }
@@ -468,22 +573,32 @@ function makeTemplates(raw, crop, wide = true) {
 // The full template set for a move: the crop-variant templates of EVERY example
 // pooled together. With multiple examples we lean on the real captures for
 // robustness and take just the tighter variants of each (see makeTemplates).
-function buildTemplates(examples) {
+function buildTemplates(examples, invariant = false) {
   const wide = examples.length <= 1;
   const out = [];
   for (const ex of examples) {
     if (!ex || !Array.isArray(ex.raw) || ex.raw.length < 2) continue;
-    for (const t of makeTemplates(ex.raw, ex.crop, wide)) out.push(t);
+    for (const t of makeTemplates(ex.raw, ex.crop, wide, invariant)) out.push(t);
   }
   return out;
+}
+
+// Best (minimum) DTW distance of a candidate against a set of templates. For
+// grip-invariant matching the candidate is tried in all four proper sign
+// flips, since its canonical frame is only determined up to one of them.
+function bestTemplateDist(cand, templates, invariant) {
+  const cands = invariant ? properFlips(cand) : [cand];
+  let best = Infinity;
+  for (const t of templates) {
+    for (const c of cands) { const d = dtwDist(c, t); if (d < best) best = d; }
+  }
+  return best;
 }
 
 // Best (minimum) DTW distance of a candidate against all of a move's templates.
 function gestureDist(norm, g) {
   const ts = (g.templates && g.templates.length) ? g.templates : (g.template ? [g.template] : []);
-  let best = Infinity;
-  for (const t of ts) { const d = dtwDist(norm, t); if (d < best) best = d; }
-  return best;
+  return bestTemplateDist(norm, ts, !!g.rotInvariant);
 }
 
 // Find the active span of a raw capture using a scale-free activity measure
@@ -614,9 +729,11 @@ function durationOk(g, durMs) {
 }
 
 function recognize(frames, durMs) {
-  const norm = resampleNorm(frames, GEST_N);
+  const plain = resampleNorm(frames, GEST_N);
+  let canon = null;   // built lazily: only when some move matches grip-invariantly
   let best = null, second = null;
   for (const g of gestures) {
+    const norm = g.rotInvariant ? (canon ??= resampleNorm(frames, GEST_N, true)) : plain;
     const d = gestureDist(norm, g);
     g._dist = d;    // shown in the list/editor even when the duration gate skips it
     if (!durationOk(g, durMs)) continue;
@@ -697,14 +814,11 @@ function unregisterGestureParam(id) {
 function autoThreshold(g) {
   const exs = gestureExamples(g);
   if (exs.length < 2) return null;
+  const inv = !!g.rotInvariant;
   const dists = [];
   for (let i = 0; i < exs.length; i++) {
-    const probe = makeTemplate(exs[i].raw, exs[i].crop);
-    let best = Infinity;
-    for (const t of buildTemplates(exs.filter((_, j) => j !== i))) {
-      const d = dtwDist(probe, t);
-      if (d < best) best = d;
-    }
+    const probe = makeTemplate(exs[i].raw, exs[i].crop, inv);
+    const best = bestTemplateDist(probe, buildTemplates(exs.filter((_, j) => j !== i), inv), inv);
     if (Number.isFinite(best)) dists.push(best);
   }
   if (!dists.length) return null;
@@ -720,8 +834,9 @@ function autoThreshold(g) {
 // taken manual control of the slider — recalibrate its match threshold.
 function refreshGestureTemplates(g) {
   const exs = gestureExamples(g);
-  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
-  g.templates = buildTemplates(exs);
+  const inv = !!g.rotInvariant;
+  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop, inv) : null;
+  g.templates = buildTemplates(exs, inv);
   const auto = autoThreshold(g);
   if (auto !== null && !g.thresholdManual) g.threshold = auto;
 }
@@ -774,6 +889,7 @@ function serializeGestures() {
   return gestures.map((g) => ({
     id: g.id, name: g.name, color: g.color,
     threshold: g.threshold, thresholdManual: !!g.thresholdManual,
+    rotInvariant: !!g.rotInvariant,
     cooldown: g.cooldown, seqGap: g.seqGap,
     examples: gestureExamples(g).map((ex) => ({
       crop: ex.crop,
@@ -823,6 +939,7 @@ function gestureFromData(g) {
     thresholdManual: typeof g.thresholdManual === "boolean"
       ? g.thresholdManual
       : typeof g.threshold === "number" && Math.abs(g.threshold - GEST_THRESH_DEFAULT) > 1e-6,
+    rotInvariant: !!g.rotInvariant,
     cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
     seqGap: typeof g.seqGap === "number" ? g.seqGap : SEQ_GAP_DEFAULT,
     examples,
@@ -970,6 +1087,7 @@ function openGestureEditor(id) {
   els.geName.value = g.name;
   els.geSens.value = threshToSens(g.threshold);
   els.geCool.value = g.cooldown || 500;
+  els.geRot.checked = !!g.rotInvariant;
   renderExampleStrip();
   updateExampleAddBtn();
   updateEditorSettingLabels();
@@ -2580,6 +2698,14 @@ async function init() {
     if (!editingGesture) return;
     editingGesture.cooldown = +els.geCool.value;
     updateEditorSettingLabels(); persistGesturesSoon();
+  });
+  els.geRot.addEventListener("change", () => {
+    if (!editingGesture) return;
+    editingGesture.rotInvariant = els.geRot.checked;
+    // Templates (and, unless manual, the auto threshold) live in whichever
+    // frame the move matches in, so both must be rebuilt on toggle.
+    refreshGestureTemplates(editingGesture);
+    updateEditorSettingLabels(); renderGestures(); persistGesturesSoon();
   });
   els.geAutoTrim.addEventListener("click", () => {
     const ex = currentExample();
