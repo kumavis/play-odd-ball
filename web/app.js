@@ -313,67 +313,67 @@ function updateGestureActivity(pipe, now, dt, feat) {
   while (pipe.hist.length && now - pipe.hist[0].t > HIST_MS) pipe.hist.shift();
 }
 
-// Given [{t,feat}] frames, compute the same activity signal and return the feat
-// rows spanning the active region (with pre-roll), trimming idle head/tail. Used
-// when importing a recorded session so a saved move matches what the live
-// segmenter would have captured.
-function activeRegion(frames) {
-  const span = frames.length ? frames[frames.length - 1].t - frames[0].t : 0;
-  if (frames.length < 3) return { rows: frames.map((f) => f.feat), durMs: span };
-  let ema = 0, firstT = null, lastT = null;
-  for (let i = 0; i < frames.length; i++) {
-    const dt = i ? Math.max(0.001, (frames[i].t - frames[i - 1].t) / 1000) : 0.05;
-    let speed = 0;
-    if (i) { let s = 0; for (let d = 0; d < frames[i].feat.length; d++) s += Math.abs(frames[i].feat[d] - frames[i - 1].feat[d]); speed = s / dt; }
-    const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
-    ema += (speed - ema) * a;
-    if (ema > SEG_END) { if (firstT === null) firstT = frames[i].t; lastT = frames[i].t; }
-  }
-  if (firstT === null) return { rows: frames.map((f) => f.feat), durMs: span };
-  const lo = firstT - SEG_PREROLL, hi = lastT + 120;
-  return { rows: frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat), durMs: lastT - firstT };
-}
-
-// Split a recorded session into EVERY distinct move it contains, using the same
-// activity thresholds as the live segmenter — so recording the move several
-// times (with a pause between reps) yields one example per rep. Returns a list
-// of feat-row arrays. Falls back to the single active region when it can't find
-// clean bursts, so a lone continuous move still imports.
+// Split a recorded session into EVERY distinct move it contains — so recording
+// the move several times (with a pause between reps) yields one example per
+// rep. Falls back to the file's single active span when no clean bursts are
+// found, so a lone continuous move still imports.
+//
+// Thresholds are the LIVE segmenter's, tightened toward the recording's own
+// peak when that peak is lower: the ~20 Hz session recorder undersamples the
+// ~58 frames/s live stream 3–4× (docs/FINDINGS.md), which shrinks the measured
+// path length and with it the absolute activity — on real Series C files the
+// fixed live thresholds found no bursts at all. The absolute floor keeps a
+// stillness recording (peak within a few× of the noise floor) from being
+// carved into garbage "reps".
+const SEG_IMPORT_FLOOR = 0.8;   // min start activity; D2 hand-tremor peaks ~0.3
 function activeRegions(frames) {
   const n = frames.length;
   if (n < 6) return [];
   // Smoothed per-frame activity (framerate-independent), mirroring the live path.
   const act = new Array(n).fill(0);
-  let ema = 0;
+  let ema = 0, peakAll = 0;
   for (let i = 0; i < n; i++) {
     const dt = i ? Math.max(0.001, (frames[i].t - frames[i - 1].t) / 1000) : 0.05;
     let speed = 0;
     if (i) { let s = 0; for (let d = 0; d < frames[i].feat.length; d++) s += Math.abs(frames[i].feat[d] - frames[i - 1].feat[d]); speed = s / dt; }
     ema += (speed - ema) * (1 - Math.exp(-dt / GEST_ACT_TAU));
     act[i] = ema;
+    if (ema > peakAll) peakAll = ema;
   }
+  const startThr = Math.min(SEG_START, Math.max(SEG_IMPORT_FLOOR, peakAll * 0.35));
+  const endThr = Math.min(SEG_END, Math.max(SEG_IMPORT_FLOOR * 0.35, peakAll * 0.12));
+  const peakMin = Math.min(SEG_PEAK_MIN, Math.max(SEG_IMPORT_FLOOR * 1.5, peakAll * 0.5));
   const regions = [];
   let i = 0;
   while (i < n) {
-    if (act[i] <= SEG_START) { i++; continue; }
+    if (act[i] <= startThr) { i++; continue; }
     const startT = frames[i].t;
     let lastActive = frames[i].t, peak = act[i], j = i;
     for (; j < n; j++) {
-      if (act[j] > SEG_END) lastActive = frames[j].t;
+      if (act[j] > endThr) lastActive = frames[j].t;
       if (act[j] > peak) peak = act[j];
       if (frames[j].t - lastActive > SEG_HOLD || frames[j].t - startT > SEG_MAX) break;
     }
     const lo = startT - SEG_PREROLL, hi = lastActive + 120;
     const rows = frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
     const durMs = lastActive - startT;
-    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) regions.push({ rows, durMs });
+    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= peakMin) regions.push({ rows, durMs });
     // Advance past the rest of this burst before scanning for the next start.
     i = j + 1;
-    while (i < n && act[i] > SEG_END) i++;
+    while (i < n && act[i] > endThr) i++;
   }
-  if (!regions.length) {
-    const one = activeRegion(frames);
-    if (one.rows.length >= 6) regions.push(one);
+  if (!regions.length && peakAll > SEG_IMPORT_FLOOR) {
+    // No clean bursts but real motion exists: import the file's single active
+    // span (idle head/tail trimmed) so a continuous move still comes through.
+    let firstT = null, lastT = null;
+    for (let k = 0; k < n; k++) {
+      if (act[k] > endThr) { if (firstT === null) firstT = frames[k].t; lastT = frames[k].t; }
+    }
+    if (firstT !== null) {
+      const lo = firstT - SEG_PREROLL, hi = lastT + 120;
+      const rows = frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
+      if (rows.length >= 6) regions.push({ rows, durMs: lastT - firstT });
+    }
   }
   return regions;
 }
@@ -424,111 +424,103 @@ function normalizeShared(rows) {
   return out;
 }
 
-// ---- Grip-invariant (rotation-canonical) matching -------------------------
-// The orientation axes the ball reports depend on how it sits in the hand: the
-// same physical move gripped 90° differently traces different CC3–5 curves and
-// won't match an axis-locked template. When a move opts in (rotInvariant), its
-// templates and each candidate are first rotated into a canonical frame — the
-// trajectory's own principal axes — so any fixed re-orientation of the ball
-// cancels out. PCA leaves each axis's sign ambiguous, and no per-trajectory
-// sign heuristic is stable for near-symmetric moves (a rep and its twin can
-// land in opposite-sign frames), so matching takes the best distance over the
-// four PROPER sign flips (det +1) of the candidate instead of trusting a
-// heuristic. Improper (mirror) flips are excluded, so a move and its mirror
-// image (clockwise vs counter-clockwise circles) stay distinct. The tradeoff:
-// distinct moves that are pure rotations of one another (tilt-left vs
-// tilt-forward) become identical — which is why this is per-move opt-in, not
-// the default. (Residual limitation: when two principal variances are nearly
-// equal the axis *order* can also swap between reps; multiple examples cover
-// that in practice.)
+// ---- Orientation-neutral matching (gravity-sphere invariants) --------------
+// Per docs/FINDINGS.md the ball is a gravity-only sensor: CC5 encodes tilt from
+// vertical ((1 − cos θ)/2, full range, R² ≈ 1.0) and CC3/CC4 encode the lean
+// azimuth (0.5 ± ~0.35·sin θ). Yaw is physically unobservable at any tilt. So
+// the entire orientation signal is the gravity direction in the ball's body
+// frame — a point moving on the unit sphere — and holding the ball differently
+// rotates that whole path by one fixed rotation (Series C measured exactly
+// this: the same arm move landed at +135°/+43°/−56° azimuth depending on grip).
+//
+// Orientation-neutral matching therefore runs on rotation-invariant properties
+// of the sphere path: the relative-speed profile (how the motion accelerates
+// and decelerates along the path) and the turning profile (geodesic curvature —
+// how the path bends, signed so clockwise and counter-clockwise stay distinct).
+// Any regrip leaves both untouched by construction; no canonical frame, sign
+// heuristics, or flip searches are needed. What is genuinely lost is lean
+// *direction* — Series C proves it is unrecoverable under an unknown grip
+// (positive C2 collides with negative C5 in raw CC space) — so direction only
+// re-enters as a tiebreaker between moves the invariants cannot separate
+// (see recognize).
 
-// Jacobi eigen-decomposition of a symmetric 3×3 matrix (plenty of precision
-// for PCA over ≤96 rows; converges in a few sweeps).
-function eigSym3(A) {
-  const a = A.map((r) => r.slice());
-  const V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
-  for (let iter = 0; iter < 24; iter++) {
-    let p = 0, q = 1, mx = Math.abs(a[0][1]);
-    if (Math.abs(a[0][2]) > mx) { p = 0; q = 2; mx = Math.abs(a[0][2]); }
-    if (Math.abs(a[1][2]) > mx) { p = 1; q = 2; mx = Math.abs(a[1][2]); }
-    if (mx < 1e-12) break;
-    const phi = 0.5 * Math.atan2(2 * a[p][q], a[p][p] - a[q][q]);
-    const c = Math.cos(phi), s = Math.sin(phi);
-    for (let k = 0; k < 3; k++) {           // A ← A·R
-      const akp = a[k][p], akq = a[k][q];
-      a[k][p] = c * akp + s * akq;
-      a[k][q] = -s * akp + c * akq;
-    }
-    for (let k = 0; k < 3; k++) {           // A ← Rᵀ·A
-      const apk = a[p][k], aqk = a[q][k];
-      a[p][k] = c * apk + s * aqk;
-      a[q][k] = -s * apk + c * aqk;
-    }
-    for (let k = 0; k < 3; k++) {           // V ← V·R
-      const vkp = V[k][p], vkq = V[k][q];
-      V[k][p] = c * vkp + s * vkq;
-      V[k][q] = -s * vkp + c * vkq;
-    }
-  }
-  return { values: [a[0][0], a[1][1], a[2][2]], vectors: [0, 1, 2].map((i) => [V[0][i], V[1][i], V[2][i]]) };
+// Fitted transfer function (docs/FINDINGS.md): trust CC5 for the vertical
+// component and use CC3/CC4 only for the horizontal *direction*, scaled to the
+// radius the vertical leaves — this absorbs the smaller, less certain azimuth
+// gain (~0.35 vs 0.50) and hand jitter near the poles.
+const G_AZ_AMP = 0.35;
+function sphereRows(rows) {
+  return rows.map((r) => {
+    const hx = (r[0] - 0.5) / G_AZ_AMP;
+    const hy = (r[1] - 0.5) / G_AZ_AMP;
+    const z = Math.max(-1, Math.min(1, 1 - 2 * r[2]));
+    const hr = Math.sqrt(Math.max(0, 1 - z * z));   // horizontal radius implied by z
+    const hlen = Math.hypot(hx, hy);
+    const s = hlen > 0.02 ? hr / hlen : 0;
+    const v = [hx * s, hy * s, z];
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  });
 }
 
-const det3 = (m) =>
-  m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-  - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-  + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+const vDot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const vCross = (a, b) => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const vLen = (a) => Math.hypot(a[0], a[1], a[2]);
+// Great-circle angle between unit vectors (stable near 0 and π).
+const arcAngle = (a, b) => Math.atan2(vLen(vCross(a, b)), vDot(a, b));
 
-// Rotate a trajectory into its canonical frame: principal axes ordered by
-// variance, each axis's sign fixed by the trajectory's skew along it (falling
-// back to its largest excursion when the skew is negligible).
-function canonicalize(rows) {
-  const N = rows.length;
-  if (N < 3 || rows[0].length !== 3) return rows.map((r) => r.slice());
-  const mean = [0, 0, 0];
-  for (const r of rows) for (let d = 0; d < 3; d++) mean[d] += r[d];
-  for (let d = 0; d < 3; d++) mean[d] /= N;
-  const X = rows.map((r) => [r[0] - mean[0], r[1] - mean[1], r[2] - mean[2]]);
-  const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  for (const r of X) for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) C[i][j] += r[i] * r[j];
-  for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) { C[i][j] /= N; C[j][i] = C[i][j]; }
-  const eig = eigSym3(C);
-  const order = [0, 1, 2].sort((i, j) => eig.values[j] - eig.values[i]);
-  const axes = order.map((i) => eig.vectors[i]);
-  const P = X.map((r) => axes.map((e) => r[0] * e[0] + r[1] * e[1] + r[2] * e[2]));
-  const signs = [1, 1, 1], conf = [0, 0, 0];
-  for (let d = 0; d < 3; d++) {
-    let cube = 0, ext = 0;
-    for (const r of P) { cube += r[d] ** 3; if (Math.abs(r[d]) > Math.abs(ext)) ext = r[d]; }
-    const ref = Math.abs(cube) > 1e-9 ? cube : ext;
-    signs[d] = ref < 0 ? -1 : 1;
-    conf[d] = Math.abs(cube) + Math.abs(ext) ** 3;   // how sure we are of this sign
+// Turning is only meaningful while the path is actually moving; below this
+// step length (radians) the direction is sensor noise and the turn reads 0.
+const TURN_MIN_ARC = 0.01;
+// Cap the relative-speed feature so a single dropped-frame step can't dominate.
+const SPEED_FEAT_MAX = 3;
+
+// The rotation-invariant profile of one capture (`rows` = raw 0..1 CC rows at
+// any resolution): GEST_N−2 feature rows of
+//   [ relative speed − 1,  sin(turn),  (1 − cos(turn))/2 ]
+// plus the total arc length (radians) for the arc gate. The turn angle is the
+// signed bend between successive great-circle steps, measured in the tangent
+// plane; encoding it as (sin, 1−cos) keeps the feature continuous through a
+// dead-stop reversal (turn ≈ ±π), where the raw sign is numerically arbitrary,
+// while sin still carries chirality for partial bends (figure-8 lobes).
+function invariantProfile(rows) {
+  const sp = resample(sphereRows(rows), GEST_N).map((v) => {
+    const l = vLen(v) || 1;                 // resampling pulls points off the sphere
+    return [v[0] / l, v[1] / l, v[2] / l];
+  });
+  const N = sp.length;
+  const arcs = new Array(N - 1);
+  let total = 0;
+  for (let i = 0; i + 1 < N; i++) { arcs[i] = arcAngle(sp[i], sp[i + 1]); total += arcs[i]; }
+  const mean = (total / arcs.length) || 1e-9;
+  const profile = [];
+  for (let i = 1; i + 1 < N; i++) {
+    const speed = Math.min(SPEED_FEAT_MAX, ((arcs[i - 1] + arcs[i]) / 2) / mean - 1);
+    let sinT = 0, bowT = 0;
+    if (arcs[i - 1] > TURN_MIN_ARC && arcs[i] > TURN_MIN_ARC) {
+      const n = sp[i];
+      const proj = (p) => {
+        const d = vDot(p, n);
+        return [p[0] - d * n[0], p[1] - d * n[1], p[2] - d * n[2]];
+      };
+      const u = proj([n[0] - sp[i - 1][0], n[1] - sp[i - 1][1], n[2] - sp[i - 1][2]]);
+      const w = proj([sp[i + 1][0] - n[0], sp[i + 1][1] - n[1], sp[i + 1][2] - n[2]]);
+      if (vLen(u) > 1e-9 && vLen(w) > 1e-9) {
+        const turn = Math.atan2(vDot(n, vCross(u, w)), vDot(u, w));
+        sinT = Math.sin(turn);
+        bowT = (1 - Math.cos(turn)) / 2;
+      }
+    }
+    profile.push([speed, sinT, bowT]);
   }
-  // Allow proper rotations only: mirroring would conflate a move with its
-  // reflection. If the transform came out improper, undo the flip we are
-  // least confident about.
-  const M = axes.map((e, d) => e.map((v) => v * signs[d]));
-  if (det3(M) < 0) {
-    let w = 0;
-    if (conf[1] < conf[w]) w = 1;
-    if (conf[2] < conf[w]) w = 2;
-    signs[w] *= -1;
-  }
-  for (const r of P) for (let d = 0; d < 3; d++) r[d] *= signs[d];
-  return P;
+  return { profile, arc: total };
 }
 
-const resampleNorm = (frames, N, invariant = false) => {
-  const rows = resample(frames, N);
-  return normalizeShared(invariant ? canonicalize(rows) : rows);
-};
-
-// The four proper (det +1) sign flips of a canonical trajectory. Two canonical
-// forms of the same physical move can differ by exactly one of these, so
-// grip-invariant matching minimizes over them rather than trusting the
-// per-trajectory sign choice.
-const PROPER_FLIPS = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
-const properFlips = (rows) =>
-  PROPER_FLIPS.map((s) => rows.map((r) => [r[0] * s[0], r[1] * s[1], r[2] * s[2]]));
+const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
 
 // A move is built from one or more EXAMPLES — real captures of the performance.
 // Each example keeps its raw 0..1 capture (resampled to RAW_N so storage is
@@ -546,21 +538,19 @@ function gestureExamples(g) {
   return (g && Array.isArray(g.examples) && g.examples.length) ? g.examples : [];
 }
 
-function makeTemplate(raw, crop, invariant = false) {
+function makeTemplate(raw, crop) {
   const a = raw.slice(crop.start, crop.end + 1);
-  return resampleNorm(a.length >= 2 ? a : raw, GEST_N, invariant);
+  return resampleNorm(a.length >= 2 ? a : raw, GEST_N);
 }
 
-// Build SEVERAL DTW templates for ONE example by cropping the capture a few
-// different ways around its crop: as-cropped, looser (more silence on both
-// ends), tighter (core only), and — when `wide` — shifted to keep more head or
-// tail. Recognition takes the best (minimum) distance across every template, so
-// a performance with slightly more/less lead-in or follow-through still
-// registers. When a move has several real examples the extra head/tail windows
-// add little (the real reps already span that variation), so `wide` is dropped
-// to keep the template count — and the per-match cost — bounded.
-function makeTemplates(raw, crop, wide = true, invariant = false) {
-  const n = raw.length;
+// A few crop windows around an example's crop: as-cropped, looser (more
+// silence on both ends), tighter (core only), and — when `wide` — shifted to
+// keep more head or tail. Recognition takes the best (minimum) distance across
+// every window's template, so a performance with slightly more/less lead-in or
+// follow-through still registers. When a move has several real examples the
+// extra head/tail windows add little (the real reps already span that
+// variation), so `wide` is dropped to bound the template count.
+function cropWindows(n, crop, wide) {
   const span = Math.max(2, crop.end - crop.start);
   const p = (f) => Math.round(span * f);
   const windows = wide ? [
@@ -580,42 +570,59 @@ function makeTemplates(raw, crop, wide = true, invariant = false) {
     s = Math.max(0, Math.min(n - 3, s));
     e = Math.max(s + 2, Math.min(n - 1, e));
     const key = s + "-" + e;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(resampleNorm(raw.slice(s, e + 1), GEST_N, invariant));
+    if (!seen.has(key)) { seen.add(key); out.push([s, e]); }
   }
   return out;
 }
 
-// The full template set for a move: the crop-variant templates of EVERY example
-// pooled together. With multiple examples we lean on the real captures for
-// robustness and take just the tighter variants of each (see makeTemplates).
-function buildTemplates(examples, invariant = false) {
+// Axis-locked (grip-dependent) template set: crop-variant normalized CC
+// trajectories of every example, pooled. Used for direction tiebreaks.
+function buildTemplates(examples) {
   const wide = examples.length <= 1;
   const out = [];
   for (const ex of examples) {
     if (!ex || !Array.isArray(ex.raw) || ex.raw.length < 2) continue;
-    for (const t of makeTemplates(ex.raw, ex.crop, wide, invariant)) out.push(t);
+    for (const [s, e] of cropWindows(ex.raw.length, ex.crop, wide)) {
+      out.push(resampleNorm(ex.raw.slice(s, e + 1), GEST_N));
+    }
   }
   return out;
 }
 
-// Best (minimum) DTW distance of a candidate against a set of templates. For
-// grip-invariant matching the candidate is tried in all four proper sign
-// flips, since its canonical frame is only determined up to one of them.
-function bestTemplateDist(cand, templates, invariant) {
-  const cands = invariant ? properFlips(cand) : [cand];
+// Orientation-neutral template set: crop-variant invariant profiles (plus each
+// window's total sphere arc, for the arc gate). This is the primary match set.
+function buildInvTemplates(examples) {
+  const wide = examples.length <= 1;
+  const out = [];
+  for (const ex of examples) {
+    if (!ex || !Array.isArray(ex.raw) || ex.raw.length < 2) continue;
+    for (const [s, e] of cropWindows(ex.raw.length, ex.crop, wide)) {
+      out.push(invariantProfile(ex.raw.slice(s, e + 1)));
+    }
+  }
+  return out;
+}
+
+// Best (minimum) DTW distance of a candidate against a set of templates.
+function bestTemplateDist(cand, templates) {
   let best = Infinity;
-  for (const t of templates) {
-    for (const c of cands) { const d = dtwDist(c, t); if (d < best) best = d; }
+  for (const t of templates) { const d = dtwDist(cand, t); if (d < best) best = d; }
+  return best;
+}
+
+// Distances of one candidate against one move, in each view.
+function invGestureDist(profile, g) {
+  let best = Infinity;
+  for (const t of g.invTemplates || []) {
+    const d = dtwDist(profile, t.profile);
+    if (d < best) best = d;
   }
   return best;
 }
 
-// Best (minimum) DTW distance of a candidate against all of a move's templates.
-function gestureDist(norm, g) {
+function axisGestureDist(norm, g) {
   const ts = (g.templates && g.templates.length) ? g.templates : (g.template ? [g.template] : []);
-  return bestTemplateDist(norm, ts, !!g.rotInvariant);
+  return bestTemplateDist(norm, ts);
 }
 
 // Find the active span of a raw capture using a scale-free activity measure
@@ -652,7 +659,11 @@ function autoTrim(raw) {
 // diagonal. Without it, two genuinely different gestures can be stretched into
 // alignment (false positives); the band also skips most of the cost matrix.
 function dtwDist(a, b) {
-  const n = a.length, m = b.length, D = GEST_DIMS.length, invD = 1 / Math.sqrt(D);
+  const n = a.length, m = b.length;
+  if (!n || !m) return Infinity;
+  // Row width varies by view (3 for CC trajectories, 3 for invariant profiles
+  // today — but derive it so the views can evolve independently).
+  const D = a[0].length, invD = 1 / Math.sqrt(D);
   const INF = Infinity;
   const band = Math.max(1, Math.round(Math.max(n, m) * DTW_BAND));
   let prev = new Array(m + 1).fill(INF);
@@ -765,29 +776,63 @@ function durationOk(g, durMs) {
       && durMs <= Math.max(...durs) * GEST_DUR_RATIO;
 }
 
+// Arc gate — the invariant twin of the duration gate. The total great-circle
+// arc a move sweeps (radians on the gravity sphere) is rotation-invariant and
+// strongly discriminative (a 90° tip out-and-back sweeps ~π; a wrist wobble
+// far less), and the relative-speed profile would otherwise erase it.
+const GEST_ARC_RATIO = 2;
+function arcOk(g, arc) {
+  if (!Number.isFinite(arc)) return true;
+  const arcs = (g.invTemplates || []).map((t) => t.arc).filter((a) => a > 0);
+  if (!arcs.length) return true;
+  // A near-zero arc (stillness/jitter) must FAIL here, not skip the gate — the
+  // relative-speed profile of noise can land eerily close to a real move's.
+  return arc >= Math.min(...arcs) / GEST_ARC_RATIO
+      && arc <= Math.max(...arcs) * GEST_ARC_RATIO;
+}
+
 // Match a candidate against every move; returns the gesture that fired (or
 // null) so the segmenter can tell whether an early attempt landed.
+//
+// Two-tier, orientation-neutral by DEFAULT: the primary score is the
+// grip-independent invariant profile, so every move matches however the ball
+// is held. When two moves near-tie there — which is exactly what happens for
+// moves that are rotations of one another (tilt-away vs tilt-left; Series C
+// shows the sensor cannot tell them apart) — the grip-DEPENDENT axis distance
+// breaks the tie, which works for players who keep a consistent grip. A move
+// flagged rotInvariant opts out of tiebreaking (it is performed in arbitrary
+// grips, so its axis distance is meaningless); ties involving it stay
+// ambiguous and are logged instead of coin-flipped.
 function recognize(frames, durMs) {
-  const plain = resampleNorm(frames, GEST_N);
-  let canon = null;   // built lazily: only when some move matches grip-invariantly
+  const axisNorm = resampleNorm(frames, GEST_N);   // grip-dependent view (tiebreaks)
+  const inv = invariantProfile(frames);            // orientation-neutral view (primary)
   let best = null, second = null, fired = null;
   for (const g of gestures) {
-    const norm = g.rotInvariant ? (canon ??= resampleNorm(frames, GEST_N, true)) : plain;
-    const d = gestureDist(norm, g);
-    g._dist = d;    // shown in the list/editor even when the duration gate skips it
-    if (!durationOk(g, durMs)) continue;
+    const d = invGestureDist(inv.profile, g);
+    g._dist = d;    // shown in the list/editor even when the gates skip it
+    g._distAxis = axisGestureDist(axisNorm, g);
+    if (!durationOk(g, durMs) || !arcOk(g, inv.arc)) continue;
+    // Only moves under their own threshold compete: a strict move that itself
+    // fails to qualify must not shadow a looser rival that would have fired.
+    if (d > g.threshold) continue;
     if (!best || d < best.d) { second = best; best = { g, d }; }
     else if (!second || d < second.d) second = { g, d };
   }
-  if (best && best.d <= best.g.threshold) {
-    const ambiguous = !!second
-      && second.d - best.d < GEST_MARGIN
-      && second.d <= second.g.threshold;
-    if (ambiguous) {
-      logEvent(`<b>GESTURE</b> ambiguous — ${escHtml(best.g.name)} d=${best.d.toFixed(2)} vs ${escHtml(second.g.name)} d=${second.d.toFixed(2)} · not firing`, "note");
-    } else {
+  if (best) {
+    const nearTie = !!second && second.d - best.d < GEST_MARGIN;
+    if (!nearTie) {
       fireGesture(best.g, best.d);
       fired = best.g;
+    } else {
+      const canTiebreak = !best.g.rotInvariant && !second.g.rotInvariant;
+      const da = best.g._distAxis, db = second.g._distAxis;
+      if (canTiebreak && Math.abs(da - db) >= GEST_MARGIN) {
+        const w = da <= db ? best : second;
+        fireGesture(w.g, w.d);
+        fired = w.g;
+      } else {
+        logEvent(`<b>GESTURE</b> ambiguous — ${escHtml(best.g.name)} d=${best.d.toFixed(2)} vs ${escHtml(second.g.name)} d=${second.d.toFixed(2)} · not firing`, "note");
+      }
     }
   }
   renderGestures();
@@ -855,11 +900,14 @@ function unregisterGestureParam(id) {
 function autoThreshold(g) {
   const exs = gestureExamples(g);
   if (exs.length < 2) return null;
-  const inv = !!g.rotInvariant;
   const dists = [];
   for (let i = 0; i < exs.length; i++) {
-    const probe = makeTemplate(exs[i].raw, exs[i].crop, inv);
-    const best = bestTemplateDist(probe, buildTemplates(exs.filter((_, j) => j !== i), inv), inv);
+    const ex = exs[i];
+    const a = ex.raw.slice(ex.crop.start, ex.crop.end + 1);
+    const probe = invariantProfile(a.length >= 2 ? a : ex.raw).profile;
+    const others = buildInvTemplates(exs.filter((_, j) => j !== i));
+    let best = Infinity;
+    for (const t of others) { const d = dtwDist(probe, t.profile); if (d < best) best = d; }
     if (Number.isFinite(best)) dists.push(best);
   }
   if (!dists.length) return null;
@@ -873,11 +921,13 @@ function autoThreshold(g) {
 // Recompute a gesture's derived templates from its current examples (called
 // after adding, deleting, or re-cropping an example) and — unless the user has
 // taken manual control of the slider — recalibrate its match threshold.
+// Both views are rebuilt: the primary orientation-neutral profiles and the
+// axis-locked trajectories used for direction tiebreaks.
 function refreshGestureTemplates(g) {
   const exs = gestureExamples(g);
-  const inv = !!g.rotInvariant;
-  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop, inv) : null;
-  g.templates = buildTemplates(exs, inv);
+  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
+  g.templates = buildTemplates(exs);
+  g.invTemplates = buildInvTemplates(exs);
   const auto = autoThreshold(g);
   if (auto !== null && !g.thresholdManual) g.threshold = auto;
 }
@@ -3312,11 +3362,10 @@ async function init() {
   });
   els.geRot.addEventListener("change", () => {
     if (!editingGesture) return;
+    // Orientation-neutral matching is always on; this flag only opts the move
+    // out of grip-direction tiebreaking against near-tie rivals (see recognize).
     editingGesture.rotInvariant = els.geRot.checked;
-    // Templates (and, unless manual, the auto threshold) live in whichever
-    // frame the move matches in, so both must be rebuilt on toggle.
-    refreshGestureTemplates(editingGesture);
-    updateEditorSettingLabels(); renderGestures(); persistGesturesSoon();
+    persistGesturesSoon();
   });
   els.geAutoTrim.addEventListener("click", () => {
     const ex = currentExample();
