@@ -1,0 +1,19 @@
+{
+  "name": "play-odd-ball",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @oddball/core && npm run build -w oddball-web",
+    "dev": "npm run dev -w oddball-web",
+    "test": "npm run test -w @oddball/core",
+    "typecheck": "npm run typecheck -w @oddball/core && npm run typecheck -w oddball-web"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

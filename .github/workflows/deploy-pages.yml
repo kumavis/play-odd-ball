@@ -23,6 +23,15 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The core library's tests replay the recordings in data/ — a deploy
+      # never ships a recognizer that regressed against real captures.
+      - run: npm test
+      - run: npm run build
       - uses: actions/configure-pages@v5
         with:
           # Enable Pages (build type: Actions) on first run — no manual
@@ -30,7 +39,7 @@ jobs:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
-          # The visualizer is fully static; publish it as the site root.
-          path: web
+          # The built Preact app is fully static; publish it as the site root.
+          path: apps/web/dist
       - id: deployment
         uses: actions/deploy-pages@v4

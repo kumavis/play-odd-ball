@@ -16,25 +16,48 @@ Once connected it appears as a MIDI input named something like `ODD 1 Bluetooth`
 ### Skip the pairing dance in the web visualizer
 
 The web app is deployed at **<https://kumavis.github.io/play-odd-ball/>**
-(published from `web/` by GitHub Actions on every push to `main`).
+(built from `apps/web/` and published by GitHub Actions on every push to
+`main`).
 
-The web app in [`web/`](web/) can pair a ball directly over Web Bluetooth — no
-Audio MIDI Setup required. Open the page in Chrome or Edge (over HTTPS or
-`localhost`), click **🔵 Connect ball**, and pick your ODD Ball from the browser
-chooser. It streams straight into the visualizer. Balls already paired through
-Audio MIDI Setup still show up in the port dropdown as before.
+The web app can pair a ball directly over Web Bluetooth — no Audio MIDI Setup
+required. Open the page in Chrome or Edge (over HTTPS or `localhost`), click
+**🔵 Connect ball**, and pick your ODD Ball from the browser chooser. It
+streams straight into the visualizer. Balls already paired through Audio MIDI
+Setup still show up in the port dropdown as before.
+
+### Repository layout
+
+- [`packages/core`](packages/core/) — **`@oddball/core`**, a TypeScript library
+  for working with the ODD Ball: MIDI parsing, BLE-MIDI decode + Web Bluetooth
+  pairing, per-device state/aggregation, roll & motion tracking, and the DTW
+  gesture-recognition stack (segmentation, orientation-neutral invariant
+  matching, counter-examples, serialization, session import). No DOM/UI
+  dependencies; tested against the real recordings in [`data/`](data/).
+- [`apps/web`](apps/web/) — the Preact + TypeScript webapp (patch bay, orbit
+  view, gesture editor, synth), built with Vite on top of `@oddball/core`.
+- [`docs/CONVERSION-NOTES.md`](docs/CONVERSION-NOTES.md) — bugs and issues
+  found (fixed vs. preserved) during the TypeScript/Preact rewrite.
 
 ### Run the web app locally
 
-The app is just static files, but Web Bluetooth (and Web MIDI) require a secure
-context, so serve it over `localhost` rather than opening the file directly:
+Web Bluetooth and Web MIDI require a secure context, so use the dev server
+(`localhost` counts):
 
 ```bash
-cd web && python3 -m http.server 8000
+npm install
+npm run dev        # vite dev server for apps/web
 ```
 
-Then open <http://localhost:8000/> in Chrome or Edge (not Brave, unless you've
-enabled `brave://flags/#brave-web-bluetooth-api`).
+Then open the printed URL in Chrome or Edge (not Brave, unless you've enabled
+`brave://flags/#brave-web-bluetooth-api`).
+
+Other commands:
+
+```bash
+npm test           # @oddball/core vitest suite (includes data/ replay tests)
+npm run build      # library typecheck/emit + production app build
+npm run typecheck  # both workspaces
+```
 
 ## Setup
 

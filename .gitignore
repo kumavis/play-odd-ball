@@ -3,6 +3,11 @@ __pycache__/
 *.pyc
 .DS_Store
 
+# Node / build output
+node_modules/
+dist/
+*.tsbuildinfo
+
 # Recorded practice sessions / raw captures (downloaded via the Record buttons)
 oddball-session-*.json
 oddball-raw-*.json
