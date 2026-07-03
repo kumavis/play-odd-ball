@@ -48,6 +48,37 @@ plus Series A.
 - Overall this is consistent with **direction-vector / quaternion-style
   components**, not three independent Euler angles.
 
+### Fitted transfer function
+
+Fitting a single-cycle sinusoid to each CC over one full turn (θ = rotation
+angle, 0→360°) fits almost perfectly — **R² = 0.96–1.00** — which is the
+strongest evidence there is no wrap: a wrap could never fit a smooth sine.
+With `cos(θ−90°) = sin θ`:
+
+| CC | Pitch turn | Roll turn |
+| --- | --- | --- |
+| CC3 | `0.50 + 0.37·sin θ` | `0.50 + 0.33·sin θ` |
+| CC4 | `0.50 − 0.34·sin θ` (anti-phase to CC3) | `0.50 + 0.37·sin θ` (in-phase with CC3) |
+| CC5 | `0.50 − 0.49·cos θ` | `0.50 − 0.50·cos θ` |
+
+Reading this as a **tilt-magnitude + azimuth** decomposition:
+
+- **CC5 = tilt from vertical.** It is the *same* function for pitch and roll —
+  `CC5 ≈ (1 − cos θ_tilt)/2` — so it depends only on *how far* the logo is from
+  straight-up, not the direction. It uses the full 0–1 range and is monotonic
+  over 0°→180° (0 = logo up, 0.5 = on its side, 1 = inverted). This is why yaw
+  (which keeps tilt = 0) moves nothing.
+- **CC3 & CC4 = lean azimuth.** They ride at 0.5 and swing ±~0.35 with `sin θ`,
+  always ~90° out of phase with CC5. The CC3↔CC4 phase relationship carries the
+  *direction* of the lean: anti-phase for a forward/back pitch, in-phase for a
+  left/right roll.
+
+**Decoding recipe (per frame):**
+
+- tilt from vertical: `θ_tilt = acos(1 − 2·CC5)` → 0–180°.
+- lean direction: `atan2(CC4 − 0.5, CC3 − 0.5)` (azimuth, up to a fixed offset).
+- heading/yaw: **not recoverable** (not encoded).
+
 ## Yaw / heading
 
 Source: `A4` (full spin about vertical, logo up).
@@ -109,7 +140,10 @@ Source: `data/B3-raw.txt` (full-rate `listen.py --raw` capture).
   statistics. Re-run B4–B7 with clean reps to quantify thresholds and ranges.
 - **CC2 Freefall** is under-characterized (peaked only 0.22); needs a proper
   drop test.
-- The exact CC-vs-angle transfer function (pure sine? clamped sine? something
-  else) is not yet fit — the B1 sweeps are the material for that; it remains to
-  do the fit.
+- The CC-vs-angle transfer function **is now fit** (see above): pure single-cycle
+  sine, R² 0.96–1.00. Remaining nuance: CC3/CC4 amplitude (~0.35) is smaller than
+  CC5's (~0.50), so the horizontal (azimuth) gain differs from the tilt gain —
+  worth confirming with a rotation about a perfectly horizontal axis.
+- The azimuth decode assumes a single-axis lean; a compound tilt (pitch+roll at
+  once, as in B2) should be checked against the `atan2` recipe.
 - CC7 is MIDI Volume per `docs/MIDI.md` and was not exercised here.
