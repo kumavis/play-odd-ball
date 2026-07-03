@@ -1,6 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+.DS_Store
 
 # Recorded practice sessions (captured via the Record button)
 oddball-session-*.json
