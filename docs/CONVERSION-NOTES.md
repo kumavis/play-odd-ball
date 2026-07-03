@@ -48,10 +48,12 @@ issues found while reading the original are listed below.
    `innerHTML` — yanking a sensitivity slider out from under a drag if a move
    completed at the wrong moment. Keyed VDOM diffing in Preact updates text
    without recreating the inputs.
-6. **`window.prompt` for profile names froze the audio/MIDI loop.** The original
-   removed the blocking prompt from *move* naming for exactly this reason but
-   kept it for profiles. Profiles now save with a default name and the Profiles
-   panel focuses the inline rename field.
+6. **Blocking dialogs (`window.prompt` / `window.confirm`) froze the audio/MIDI
+   loop.** The original removed the blocking prompt from *move* naming for
+   exactly this reason but kept it for profile naming and deletion. Profiles
+   now save with a default name (the Profiles panel focuses the inline rename
+   field), and deletion is a two-step inline confirm (× → "Delete?", reverting
+   after 3 s). No blocking dialogs remain anywhere in the app.
 7. **XSS-prone log/DOM writes.** The log, hints, and several list renderers were
    built with `innerHTML` + a hand-rolled `escHtml`; one missed escape on a
    device/file/profile name is an injection. The Preact version renders
@@ -98,9 +100,8 @@ is a product decision, not a port:
 8. **Oldest legacy gesture format** (template-only, pre-raw-capture) is loaded
    by treating normalized template rows as a raw 0..1 capture — those moves
    match poorly until re-recorded (already true in the original).
-9. **`window.confirm` on profile delete** still blocks the loop briefly.
-10. **BLE decoder** handles channel-voice + realtime only (no SysEx, no
-    multi-packet messages) — fine for the ODD Ball, worth knowing for reuse.
+9. **BLE decoder** handles channel-voice + realtime only (no SysEx, no
+   multi-packet messages) — fine for the ODD Ball, worth knowing for reuse.
 
 ## New capabilities added during the conversion
 

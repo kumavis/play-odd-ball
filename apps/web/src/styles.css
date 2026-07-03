@@ -373,6 +373,11 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .profile-load:hover { color: var(--accent-2); border-color: var(--accent-2); }
 .profile-del { width: 28px; padding: 6px 0; text-align: center; }
 .profile-del:hover { color: var(--warn); border-color: var(--warn); }
+.profile-del.is-confirming {
+  width: auto; padding: 6px 10px;
+  color: var(--warn); border-color: var(--warn);
+  font-weight: 600;
+}
 
 /* ---- Gesture editor modal ---- */
 .gedit {

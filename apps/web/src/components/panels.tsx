@@ -258,6 +258,16 @@ function LogPanel() {
 function ProfilesPanel() {
   const profiles = profilesSig.value;
   const reveal = revealProfileId.value;
+  // Two-step inline delete instead of window.confirm — a blocking dialog
+  // would stall the MIDI/animation loop (see docs/CONVERSION-NOTES.md).
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout>>();
+  const armDelete = (id: string) => {
+    setConfirmingId(id);
+    clearTimeout(confirmTimer.current);
+    confirmTimer.current = setTimeout(() => setConfirmingId(null), 3000);
+  };
+  useEffect(() => () => clearTimeout(confirmTimer.current), []);
 
   // Focus + select the name of a just-saved profile for instant renaming.
   useEffect(() => {
@@ -311,13 +321,19 @@ function ProfilesPanel() {
                   Load
                 </button>
                 <button
-                  class="profile-del"
-                  title="Delete profile"
+                  class={`profile-del${confirmingId === p.id ? " is-confirming" : ""}`}
+                  title={confirmingId === p.id ? "Click again to delete this profile" : "Delete profile"}
                   onClick={() => {
-                    if (window.confirm(`Delete profile “${p.name}”?`)) deleteProfile(p.id);
+                    if (confirmingId === p.id) {
+                      clearTimeout(confirmTimer.current);
+                      setConfirmingId(null);
+                      deleteProfile(p.id);
+                    } else {
+                      armDelete(p.id);
+                    }
                   }}
                 >
-                  ×
+                  {confirmingId === p.id ? "Delete?" : "×"}
                 </button>
               </div>
             );
