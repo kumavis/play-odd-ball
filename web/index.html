@@ -56,7 +56,8 @@
           </button>
           <span id="histLegend" class="hist-legend"></span>
           <div class="hist-actions">
-            <button id="recSession" class="rec-btn" title="Record this session's data and download it">⏺ Record</button>
+            <button id="recSession" class="rec-btn" title="Record this session's data (~20 Hz value snapshots) and download it">⏺ Record</button>
+            <button id="recRaw" class="rec-btn" title="High-fidelity capture: every MIDI message at full rate, including Tap/Shake/Twist notes — for analysis (like listen.py --raw)">⏺ Raw</button>
             <button id="recMove" class="rec-btn" title="Record a move — repeat it a few times for a more reliable trigger — then wire it in the patch bay">✋ Record move</button>
             <button id="importMove" class="rec-btn" title="Turn a recorded session into a move trigger — every rep in it becomes an example">📂 Import move</button>
             <input id="importFile" type="file" accept="application/json,.json" hidden />
@@ -205,7 +206,7 @@
     <p><strong>Connect a ball.</strong> Click <code>🔵 Connect ball</code> to pair over Bluetooth right here (Chrome or Edge) — no macOS MIDI setup needed. Already paired in <em>Audio MIDI Setup</em>? Pick its port above instead. Then bounce / shake / spin the ball.</p>
   </div>
 
-  <script src="synth.js?v=25"></script>
-  <script src="app.js?v=25"></script>
+  <script src="synth.js?v=26"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

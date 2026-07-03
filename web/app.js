@@ -45,6 +45,7 @@ const els = {
   histCanvas: document.getElementById("histCanvas"),
   histLegend: document.getElementById("histLegend"),
   recSession: document.getElementById("recSession"),
+  recRaw: document.getElementById("recRaw"),
   recMove: document.getElementById("recMove"),
   importMove: document.getElementById("importMove"),
   importFile: document.getElementById("importFile"),
@@ -1357,6 +1358,66 @@ function stopSessionRec() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   logEvent(`<b>REC</b> session saved · ${rec.samples.length} samples`, "note");
+}
+
+// ---- High-fidelity (event-driven) raw capture ---------------------------
+// The session recorder above snapshots PARAMS on a ~20 Hz timer, which aliases
+// the ball's ~400 msg/s stream and — because it only stores decoded values —
+// drops Note messages (Tap/Shake/Twist) entirely. This mode instead logs EVERY
+// non-realtime MIDI message the moment it arrives (see onMidiMessage), so the
+// download matches what `listen.py --raw` captures: full rate, notes included.
+let rawRec = null;             // { start, msgs: [] }
+
+function toggleRawRec() {
+  if (rawRec) { stopRawRec(); return; }
+  rawRec = { start: performance.now(), msgs: [] };
+  els.recRaw.classList.add("is-recording");
+  els.recRaw.textContent = "⏹ Stop raw · 0.0s";
+  logEvent("<b>RAW</b> full-rate capture started", "note");
+}
+
+// Called from onMidiMessage for each non-realtime message while armed.
+function rawRecPush(data, target) {
+  if (!rawRec) return;
+  const [status, d1, d2] = data;
+  rawRec.msgs.push({
+    t: +(performance.now() - rawRec.start).toFixed(2),  // ms from start
+    dev: (target && target.id) || "_",
+    status,
+    d1: d1 ?? null,
+    d2: d2 ?? null,
+  });
+}
+
+function stopRawRec() {
+  const rec = rawRec;
+  rawRec = null;
+  els.recRaw.classList.remove("is-recording");
+  els.recRaw.textContent = "⏺ Raw";
+  if (!rec || !rec.msgs.length) {
+    if (rec) logEvent("<b>RAW</b> capture stopped — no messages", "note");
+    return;
+  }
+  const durationMs = Math.round(performance.now() - rec.start);
+  const payload = {
+    recorded: new Date().toISOString(),
+    durationMs,
+    format: "oddball-raw-midi-1",
+    note: "Every non-realtime MIDI message in arrival order. t = ms from start; " +
+      "status/d1/d2 are the raw MIDI bytes (0x90 note-on, 0xB0 control-change, …).",
+    messages: rec.msgs,
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `oddball-raw-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const rate = Math.round(rec.msgs.length / (durationMs / 1000));
+  logEvent(`<b>RAW</b> saved · ${rec.msgs.length} messages · ${rate}/s`, "note");
 }
 
 // ---- Connections --------------------------------------------------------
@@ -2905,6 +2966,9 @@ function onMidiMessage(e) {
   if (status >= 0xf8) return;
   const type = status & 0xf0;
   msgCount++;
+  // High-fidelity capture: log the raw message before any app-side filtering
+  // (e.g. the CC7 drop below) so the file is a faithful record of the stream.
+  if (rawRec) rawRecPush(e.data, e.target);
 
   if (type === 0x90 && d2 > 0) {            // note on
     const gesture = NOTE_GESTURE[d1];
@@ -3202,6 +3266,7 @@ async function init() {
     if (inp && e.key === "Enter") { e.preventDefault(); inp.blur(); }
   });
   els.recSession.addEventListener("click", toggleSessionRec);
+  els.recRaw.addEventListener("click", toggleRawRec);
   els.recMove.addEventListener("click", toggleRecordMove);
   els.importMove.addEventListener("click", () => els.importFile.click());
   els.importFile.addEventListener("change", (e) => {
@@ -3421,6 +3486,10 @@ async function init() {
     drawHistory();
     updateEditorLive();
     sampleSession(now);
+    if (rawRec) {
+      els.recRaw.textContent =
+        `⏹ Stop raw · ${((now - rawRec.start) / 1000).toFixed(1)}s · ${rawRec.msgs.length} msg`;
+    }
 
     if (now - lastRate >= 1000) {
       const rate = Math.round((msgCount - lastCount) * 1000 / (now - lastRate));
