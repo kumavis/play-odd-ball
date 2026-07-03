@@ -59,7 +59,17 @@ issues found while reading the original are listed below.
    device/file/profile name is an injection. The Preact version renders
    untrusted strings as text nodes only.
 8. **Missing favicon** produced a console 404 on every load (cosmetic).
-9. **`#root` layout (conversion-specific).** The original styled `<body>` as the
+9. **Orbit view's cable editor closed the instant it opened.** The connection
+   editor's global "click outside closes" handler special-cased the rack's
+   `.cable-hit` SVG elements but not the orbit canvas, so the same click that
+   opened the editor from an orbit cable also closed it (the original had this
+   race too — its close handler ran after `openEditor` on the same
+   `pointerdown`). Cable hits on the canvas now stop propagation, which makes
+   "click a cable → Disconnect" actually usable in the orbit view. The orbit
+   view also gained the rack's click-to-connect mode for parity: a short press
+   on a satellite's port arms a cable that trails the cursor until a click on
+   an instrument completes it (Escape or clicking elsewhere cancels).
+10. **`#root` layout (conversion-specific).** The original styled `<body>` as the
    flex column; mounting the app under `#root` silently collapsed the orbit
    view to 2 px height. Worth calling out because *nothing errored* — the rack
    still worked (absolutely-positioned nodes). Caught by screenshotting in the

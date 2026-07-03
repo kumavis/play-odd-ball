@@ -62,7 +62,18 @@ class Orbit {
   byKey: Record<string, OrbNode> = {};
   ball: OrbNode;
   drag: { node: OrbNode; ox: number; oy: number; downX: number; downY: number } | null = null;
-  link: { fromKey: string; x: number; y: number; over: OrbNode | null } | null = null;
+  /** In-progress patch cable. `armed` mirrors the rack's click-to-connect mode:
+   * a short press on a port keeps the cable trailing the cursor until the next
+   * click on an instrument completes it (or anything else cancels). */
+  link: {
+    fromKey: string;
+    x: number;
+    y: number;
+    over: OrbNode | null;
+    downX: number;
+    downY: number;
+    armed: boolean;
+  } | null = null;
   built = false;
 
   constructor(readonly canvas: HTMLCanvasElement) {
@@ -529,6 +540,8 @@ export function OrbitView() {
   useEffect(() => {
     const cv = canvasRef.current!;
     const orbit = (orbitRef.current = new Orbit(cv));
+    // Debug/test hook (canvas UIs are otherwise opaque to automation).
+    (window as any).__oddballOrbit = orbit;
 
     const onMove = (e: PointerEvent) => {
       const p = orbit.point(e);
@@ -544,15 +557,33 @@ export function OrbitView() {
         n.vy = 0;
       }
     };
-    const onUp = (e: PointerEvent) => {
+    const clearLink = () => {
+      orbit.link = null;
       window.removeEventListener("pointermove", onMove);
+    };
+    const completeLink = (instKey: string | null) => {
+      if (instKey && orbit.link && paramByKey(orbit.link.fromKey)) connect(orbit.link.fromKey, instKey);
+      clearLink();
+    };
+    const onUp = (e: PointerEvent) => {
       window.removeEventListener("pointerup", onUp);
       const p = orbit.point(e);
-      if (orbit.link) {
+      if (orbit.link && !orbit.link.armed) {
         const inst = orbit.hitInst(p.x, p.y);
-        if (inst && paramByKey(orbit.link.fromKey)) connect(orbit.link.fromKey, inst.key);
-        orbit.link = null;
-      } else if (orbit.drag) {
+        if (inst) {
+          completeLink(inst.key);
+          return;
+        }
+        // Released without landing on an instrument: if it was basically a
+        // click (no real drag), keep the link armed so the next click on a
+        // triangle finishes it — same as the rack view.
+        const moved = Math.hypot(p.x - orbit.link.downX, p.y - orbit.link.downY);
+        if (moved < 6) orbit.link.armed = true; // keep pointermove trailing the cursor
+        else clearLink();
+        return;
+      }
+      window.removeEventListener("pointermove", onMove);
+      if (orbit.drag) {
         const d = orbit.drag;
         orbit.drag = null;
         const moved = Math.hypot(p.x - d.downX, p.y - d.downY) > 5;
@@ -564,12 +595,21 @@ export function OrbitView() {
       if (patchViewSig.peek() !== "orbit") return;
       const p = orbit.point(e);
       e.preventDefault();
+      // 0. an armed link from a previous click lands on an instrument (or cancels)
+      if (orbit.link?.armed) {
+        const inst = orbit.hitInst(p.x, p.y);
+        completeLink(inst ? inst.key : null);
+        // Landing/cancelling a link is a complete action: keep the global
+        // "click outside closes the editor" handler out of it.
+        e.stopPropagation();
+        return;
+      }
       // 1. output port of a satellite → begin a patch cable
       for (const n of orbit.nodes) {
         if (n.type !== "param") continue;
         const port = orbit.portOut(n);
         if (Math.hypot(p.x - port.x, p.y - port.y) <= 11) {
-          orbit.link = { fromKey: n.key, x: p.x, y: p.y, over: null };
+          orbit.link = { fromKey: n.key, x: p.x, y: p.y, over: null, downX: p.x, downY: p.y, armed: false };
           window.addEventListener("pointermove", onMove);
           window.addEventListener("pointerup", onUp);
           return;
@@ -585,13 +625,31 @@ export function OrbitView() {
         window.addEventListener("pointerup", onUp);
         return;
       }
-      // 3. a cable → open its connection editor
+      // 3. a cable → open its connection editor (with the Disconnect button,
+      // threshold/attenuation and playback controls — same as the rack).
       const inst = orbit.cableAt(p.x, p.y);
-      if (inst) connEditorSig.value = { instKey: inst, x: e.clientX, y: e.clientY };
+      if (inst) {
+        connEditorSig.value = { instKey: inst, x: e.clientX, y: e.clientY };
+        // Rack cables are .cable-hit elements, which the editor's global
+        // close-on-outside-click handler recognizes; canvas cable hits need
+        // the same treatment or the editor closes the instant it opens.
+        e.stopPropagation();
+      }
+    };
+    // Escape — or a click anywhere off the orbit — cancels an armed link.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && orbit.link) clearLink();
+    };
+    const onWindowDown = (e: PointerEvent) => {
+      if (orbit.link?.armed && !(e.target as HTMLElement).closest(".orbit")) clearLink();
     };
     cv.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onWindowDown);
     return () => {
       cv.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onWindowDown);
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
@@ -611,7 +669,8 @@ export function OrbitView() {
     <div class={`orbit${active ? "" : " orbit--hidden"}`}>
       <canvas class="orbit-canvas" ref={canvasRef}></canvas>
       <div class="orbit-hint">
-        drag the halo dot on a signal onto a triangle to patch it · click a cable to edit · drag nodes to rearrange
+        click or drag a signal's halo dot onto a triangle to patch it · click a cable to edit / disconnect · drag
+        nodes to rearrange
       </div>
     </div>
   );

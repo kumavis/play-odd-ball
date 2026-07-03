@@ -38,6 +38,7 @@ export async function initRuntime(): Promise<void> {
   //   __oddball.feed("sim", [0xb0, 3, 64])
   (window as any).__oddball = {
     engine,
+    connections,
     feed: (deviceId: string, data: number[]) => onMidiMessage(deviceId, data),
   };
 
