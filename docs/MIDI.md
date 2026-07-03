@@ -83,7 +83,9 @@ behaviour.
 
 ## Verifying the mapping
 
-The mapping is the one uncertain part, so confirm it against your ball:
+For a full scripted characterization session (axis sweeps, wrap/gimbal probes,
+same-move-different-grip sets), follow [RECORDING-PROTOCOL.md](RECORDING-PROTOCOL.md).
+For a quick check, confirm the basic mapping against your ball:
 
 ```bash
 .venv/bin/python listen.py --raw
