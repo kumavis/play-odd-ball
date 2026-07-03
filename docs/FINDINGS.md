@@ -228,6 +228,41 @@ taps; the backhand-invert has near-zero freefall but Shake-note bursts (vel 127)
 Taps from the reversal. So freefall + Note pattern separate them even though both
 saturate energy/movement.
 
+## Matcher built from these findings (implemented in `web/app.js`)
+
+Since the entire orientation signal is the gravity direction in the ball's
+body frame — a path on the unit sphere, which a regrip transforms by one fixed
+rotation — the matcher now works orientation-neutrally **by default**:
+
+- **Reconstruction:** each CC frame → unit gravity vector via the fitted
+  transfer function (CC5 trusted for the vertical, CC3/CC4 for horizontal
+  *direction* only, rescaled to the radius the vertical implies).
+- **Invariant profile:** per resampled step, `[relative speed, sin(turn),
+  (1−cos(turn))/2]` — the speed profile and signed geodesic turning of the
+  sphere path. Exactly rotation-invariant, chirality-preserving, no canonical
+  frame or sign heuristics. Total sphere arc is kept as a gate (like the
+  duration gate: candidate must be within 2× of the examples' range).
+- **Two tiers:** the invariant distance is the trigger. When two moves
+  near-tie there — exactly what happens for rotated copies like tip-away vs
+  tip-left, which Series C proves the sensor cannot separate — the
+  grip-*dependent* axis-space distance breaks the tie (works when the player
+  keeps a consistent grip). A move flagged "any-grip only" opts out of
+  tiebreaks and near-ties involving it stay unfired and logged.
+
+Validated against this data (move = 5 C1 reps, auto-threshold 0.315):
+C2 regripped **10/10**, C3 logo-down **6/7**, C1 5/5 — where axis-space
+distances (0.85–1.09) confirm these were unmatchable before. C4/C5 match the
+invariant tier as physics requires, and their axis distances (≈0.9–1.15 vs
+≈0.00 for C1) give the tiebreaker a ~0.9 margin. Negatives: B4 shake 0/5,
+B1-pitch 0/1, home-grip-twist 0/13, D2 stillness segments nothing.
+
+One practical bug this surfaced: the ~20 Hz session recorder's undersampling
+shrinks measured path activity ~3–4×, so the import splitter's fixed live
+thresholds found **no** rep boundaries in the Series C files (each collapsed
+to one whole-file region). The splitter now adapts its thresholds to the
+recording's own activity peak (with an absolute floor so stillness recordings
+don't get carved into noise "reps").
+
 ## Custom recordings
 
 - **`home-grip-twist`:** a repeated slow "doorknob" double-twist
