@@ -60,6 +60,7 @@ const els = {
   geCropReset: document.getElementById("geCropReset"),
   geSens: document.getElementById("geSens"),
   geSensVal: document.getElementById("geSensVal"),
+  geRot: document.getElementById("geRot"),
   geCool: document.getElementById("geCool"),
   geCoolVal: document.getElementById("geCoolVal"),
   geDist: document.getElementById("geDist"),
@@ -112,10 +113,6 @@ const ROLL_CHANNELS = new Set([3, 4, 5]);
 // them (average) into the shared `cc` used by the parameters.
 const deviceCc = {};
 let rollAccum = 0;
-// Orientation/spin path length (normalized) accumulated from EVERY message, so
-// gesture activity & motion energy reflect fast motion instead of aliasing at
-// the animation frame rate. Drained each frame in updateGestureActivity.
-let featAccum = 0;
 let rollRate = 0;      // smoothed CC-units/sec on channels 3-5
 let rollSpeed = 0;     // final gated 0..1 intensity sent to the synth
 let rollRaw = 0;       // ungated normalized rate (0..1) for the meter
@@ -190,6 +187,13 @@ const GEST_ACT_TAU = 0.15;                // s; smoothing for the activity signa
 const SEG_START = 4.0;                    // activity (Σ|Δfeat|/s) that begins a move
 const SEG_END = 1.4;                      // activity under which the ball is "still"
 const SEG_HOLD = 400;                     // ms below SEG_END that ends a move
+// Recognition doesn't wait for SEG_HOLD: matching only ever uses frames up to
+// SEG_TAIL past the last activity, so once the ball has been still that long
+// the data is complete and we match immediately. SEG_HOLD still governs when
+// the segment *closes* (it exists so a brief mid-move pause doesn't split a
+// move in half, not because more data is coming).
+const SEG_TAIL = 120;                     // ms of trailing stillness kept in a move
+const SEG_EARLY_MS = SEG_TAIL;            // stillness before an early match attempt
 const SEG_PREROLL = 320;                  // ms of pre-motion frames folded into a move
 const SEG_MIN_MS = 260;                   // ignore twitches shorter than this
 const SEG_MAX = 4000;                     // ms cap on a single move
@@ -272,27 +276,37 @@ function fireChain(source, gap) {
   });
 }
 let recordingGesture = null;       // { name, targetId, examples[] } while armed to capture
-let seg = null;                    // { frames: [{t,feat}] } current motion segment
-let segLastActive = 0;
-let gestActivity = 0;              // smoothed Σ|Δfeat|/s
-const histFrames = [];             // recent { t, feat } ring, for segment pre-roll
+let gestActivity = 0;              // most active ball's smoothed Σ|Δfeat|/s (orb/motion display)
 const HIST_MS = 4000;
 
-const featureVec = () => GEST_DIMS.map((c) => (cc[c] ?? 0) / 127);
+// Per-device gesture pipelines. Each ball gets its own feature stream,
+// activity signal, history buffer and segmenter, keyed by input id — the
+// shared `cc` average is fine for sound routing, but a blended pose from two
+// balls is meaningless for recognition, and a second (even still) controller
+// would dilute the first one's motion. Any ball can trigger any move;
+// simultaneous triggers are de-duplicated by each move's cooldown. A pipe's
+// featAccum gathers orientation path length from EVERY message (drained each
+// frame) so fast motion keeps reading faster instead of aliasing at 60fps.
+const gestPipes = {};   // device id -> { featAccum, activity, hist, seg, segLastActive }
+const gestPipe = (id) =>
+  gestPipes[id] || (gestPipes[id] = { featAccum: 0, activity: 0, hist: [], seg: null, segLastActive: 0 });
+const clearGestPipes = () => { for (const id in gestPipes) delete gestPipes[id]; };
+const deviceFeature = (id) => GEST_DIMS.map((c) => ((deviceCc[id] || {})[c] ?? 0) / 127);
 
-// Track how fast the orientation is changing (framerate-independent) and keep a
-// short history buffer so a move's wind-up can be folded in as pre-roll.
-function updateGestureActivity(now, dt, feat) {
+// Track how fast one device's orientation is changing (framerate-independent)
+// and keep a short history buffer so a move's wind-up can be folded in as
+// pre-roll.
+function updateGestureActivity(pipe, now, dt, feat) {
   // Speed is the orientation path length per second gathered from every MIDI
   // message this frame (drained here). For smooth motion this equals the old
   // net-delta reading, so thresholds stay calibrated; for fast motion it keeps
   // climbing instead of aliasing down once the ball outruns the frame rate.
-  const speed = featAccum / dt;
-  featAccum = 0;
+  const speed = pipe.featAccum / dt;
+  pipe.featAccum = 0;
   const a = 1 - Math.exp(-dt / GEST_ACT_TAU);
-  gestActivity += (speed - gestActivity) * a;
-  histFrames.push({ t: now, feat });
-  while (histFrames.length && now - histFrames[0].t > HIST_MS) histFrames.shift();
+  pipe.activity += (speed - pipe.activity) * a;
+  pipe.hist.push({ t: now, feat });
+  while (pipe.hist.length && now - pipe.hist[0].t > HIST_MS) pipe.hist.shift();
 }
 
 // Given [{t,feat}] frames, compute the same activity signal and return the feat
@@ -300,7 +314,8 @@ function updateGestureActivity(now, dt, feat) {
 // when importing a recorded session so a saved move matches what the live
 // segmenter would have captured.
 function activeRegion(frames) {
-  if (frames.length < 3) return frames.map((f) => f.feat);
+  const span = frames.length ? frames[frames.length - 1].t - frames[0].t : 0;
+  if (frames.length < 3) return { rows: frames.map((f) => f.feat), durMs: span };
   let ema = 0, firstT = null, lastT = null;
   for (let i = 0; i < frames.length; i++) {
     const dt = i ? Math.max(0.001, (frames[i].t - frames[i - 1].t) / 1000) : 0.05;
@@ -310,9 +325,9 @@ function activeRegion(frames) {
     ema += (speed - ema) * a;
     if (ema > SEG_END) { if (firstT === null) firstT = frames[i].t; lastT = frames[i].t; }
   }
-  if (firstT === null) return frames.map((f) => f.feat);
+  if (firstT === null) return { rows: frames.map((f) => f.feat), durMs: span };
   const lo = firstT - SEG_PREROLL, hi = lastT + 120;
-  return frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
+  return { rows: frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat), durMs: lastT - firstT };
 }
 
 // Split a recorded session into EVERY distinct move it contains, using the same
@@ -347,14 +362,14 @@ function activeRegions(frames) {
     const lo = startT - SEG_PREROLL, hi = lastActive + 120;
     const rows = frames.filter((f) => f.t >= lo && f.t <= hi).map((f) => f.feat);
     const durMs = lastActive - startT;
-    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) regions.push(rows);
+    if (rows.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) regions.push({ rows, durMs });
     // Advance past the rest of this burst before scanning for the next start.
     i = j + 1;
     while (i < n && act[i] > SEG_END) i++;
   }
   if (!regions.length) {
     const one = activeRegion(frames);
-    if (one.length >= 6) regions.push(one);
+    if (one.rows.length >= 6) regions.push(one);
   }
   return regions;
 }
@@ -405,7 +420,111 @@ function normalizeShared(rows) {
   return out;
 }
 
-const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
+// ---- Grip-invariant (rotation-canonical) matching -------------------------
+// The orientation axes the ball reports depend on how it sits in the hand: the
+// same physical move gripped 90° differently traces different CC3–5 curves and
+// won't match an axis-locked template. When a move opts in (rotInvariant), its
+// templates and each candidate are first rotated into a canonical frame — the
+// trajectory's own principal axes — so any fixed re-orientation of the ball
+// cancels out. PCA leaves each axis's sign ambiguous, and no per-trajectory
+// sign heuristic is stable for near-symmetric moves (a rep and its twin can
+// land in opposite-sign frames), so matching takes the best distance over the
+// four PROPER sign flips (det +1) of the candidate instead of trusting a
+// heuristic. Improper (mirror) flips are excluded, so a move and its mirror
+// image (clockwise vs counter-clockwise circles) stay distinct. The tradeoff:
+// distinct moves that are pure rotations of one another (tilt-left vs
+// tilt-forward) become identical — which is why this is per-move opt-in, not
+// the default. (Residual limitation: when two principal variances are nearly
+// equal the axis *order* can also swap between reps; multiple examples cover
+// that in practice.)
+
+// Jacobi eigen-decomposition of a symmetric 3×3 matrix (plenty of precision
+// for PCA over ≤96 rows; converges in a few sweeps).
+function eigSym3(A) {
+  const a = A.map((r) => r.slice());
+  const V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let iter = 0; iter < 24; iter++) {
+    let p = 0, q = 1, mx = Math.abs(a[0][1]);
+    if (Math.abs(a[0][2]) > mx) { p = 0; q = 2; mx = Math.abs(a[0][2]); }
+    if (Math.abs(a[1][2]) > mx) { p = 1; q = 2; mx = Math.abs(a[1][2]); }
+    if (mx < 1e-12) break;
+    const phi = 0.5 * Math.atan2(2 * a[p][q], a[p][p] - a[q][q]);
+    const c = Math.cos(phi), s = Math.sin(phi);
+    for (let k = 0; k < 3; k++) {           // A ← A·R
+      const akp = a[k][p], akq = a[k][q];
+      a[k][p] = c * akp + s * akq;
+      a[k][q] = -s * akp + c * akq;
+    }
+    for (let k = 0; k < 3; k++) {           // A ← Rᵀ·A
+      const apk = a[p][k], aqk = a[q][k];
+      a[p][k] = c * apk + s * aqk;
+      a[q][k] = -s * apk + c * aqk;
+    }
+    for (let k = 0; k < 3; k++) {           // V ← V·R
+      const vkp = V[k][p], vkq = V[k][q];
+      V[k][p] = c * vkp + s * vkq;
+      V[k][q] = -s * vkp + c * vkq;
+    }
+  }
+  return { values: [a[0][0], a[1][1], a[2][2]], vectors: [0, 1, 2].map((i) => [V[0][i], V[1][i], V[2][i]]) };
+}
+
+const det3 = (m) =>
+  m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+  - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+  + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+
+// Rotate a trajectory into its canonical frame: principal axes ordered by
+// variance, each axis's sign fixed by the trajectory's skew along it (falling
+// back to its largest excursion when the skew is negligible).
+function canonicalize(rows) {
+  const N = rows.length;
+  if (N < 3 || rows[0].length !== 3) return rows.map((r) => r.slice());
+  const mean = [0, 0, 0];
+  for (const r of rows) for (let d = 0; d < 3; d++) mean[d] += r[d];
+  for (let d = 0; d < 3; d++) mean[d] /= N;
+  const X = rows.map((r) => [r[0] - mean[0], r[1] - mean[1], r[2] - mean[2]]);
+  const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (const r of X) for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) C[i][j] += r[i] * r[j];
+  for (let i = 0; i < 3; i++) for (let j = i; j < 3; j++) { C[i][j] /= N; C[j][i] = C[i][j]; }
+  const eig = eigSym3(C);
+  const order = [0, 1, 2].sort((i, j) => eig.values[j] - eig.values[i]);
+  const axes = order.map((i) => eig.vectors[i]);
+  const P = X.map((r) => axes.map((e) => r[0] * e[0] + r[1] * e[1] + r[2] * e[2]));
+  const signs = [1, 1, 1], conf = [0, 0, 0];
+  for (let d = 0; d < 3; d++) {
+    let cube = 0, ext = 0;
+    for (const r of P) { cube += r[d] ** 3; if (Math.abs(r[d]) > Math.abs(ext)) ext = r[d]; }
+    const ref = Math.abs(cube) > 1e-9 ? cube : ext;
+    signs[d] = ref < 0 ? -1 : 1;
+    conf[d] = Math.abs(cube) + Math.abs(ext) ** 3;   // how sure we are of this sign
+  }
+  // Allow proper rotations only: mirroring would conflate a move with its
+  // reflection. If the transform came out improper, undo the flip we are
+  // least confident about.
+  const M = axes.map((e, d) => e.map((v) => v * signs[d]));
+  if (det3(M) < 0) {
+    let w = 0;
+    if (conf[1] < conf[w]) w = 1;
+    if (conf[2] < conf[w]) w = 2;
+    signs[w] *= -1;
+  }
+  for (const r of P) for (let d = 0; d < 3; d++) r[d] *= signs[d];
+  return P;
+}
+
+const resampleNorm = (frames, N, invariant = false) => {
+  const rows = resample(frames, N);
+  return normalizeShared(invariant ? canonicalize(rows) : rows);
+};
+
+// The four proper (det +1) sign flips of a canonical trajectory. Two canonical
+// forms of the same physical move can differ by exactly one of these, so
+// grip-invariant matching minimizes over them rather than trusting the
+// per-trajectory sign choice.
+const PROPER_FLIPS = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+const properFlips = (rows) =>
+  PROPER_FLIPS.map((s) => rows.map((r) => [r[0] * s[0], r[1] * s[1], r[2] * s[2]]));
 
 // A move is built from one or more EXAMPLES — real captures of the performance.
 // Each example keeps its raw 0..1 capture (resampled to RAW_N so storage is
@@ -413,9 +532,9 @@ const resampleNorm = (frames, N) => normalizeShared(resample(frames, N));
 // region. Storing several real examples (repeat the move, or crop several reps
 // out of one recording) makes matching far more robust than re-cropping a single
 // take, because it captures the genuine run-to-run variation of the gesture.
-function makeExample(rawFrames) {
-  const raw = resample(rawFrames, RAW_N);
-  return { raw, crop: autoTrim(raw) };
+function makeExample(ex) {
+  const raw = resample(ex.rows, RAW_N);
+  return { raw, crop: autoTrim(raw), durMs: typeof ex.durMs === "number" && ex.durMs > 0 ? ex.durMs : null };
 }
 
 // Coerce whatever is stored on a gesture into a clean, non-empty examples list.
@@ -423,9 +542,9 @@ function gestureExamples(g) {
   return (g && Array.isArray(g.examples) && g.examples.length) ? g.examples : [];
 }
 
-function makeTemplate(raw, crop) {
+function makeTemplate(raw, crop, invariant = false) {
   const a = raw.slice(crop.start, crop.end + 1);
-  return resampleNorm(a.length >= 2 ? a : raw, GEST_N);
+  return resampleNorm(a.length >= 2 ? a : raw, GEST_N, invariant);
 }
 
 // Build SEVERAL DTW templates for ONE example by cropping the capture a few
@@ -436,7 +555,7 @@ function makeTemplate(raw, crop) {
 // registers. When a move has several real examples the extra head/tail windows
 // add little (the real reps already span that variation), so `wide` is dropped
 // to keep the template count — and the per-match cost — bounded.
-function makeTemplates(raw, crop, wide = true) {
+function makeTemplates(raw, crop, wide = true, invariant = false) {
   const n = raw.length;
   const span = Math.max(2, crop.end - crop.start);
   const p = (f) => Math.round(span * f);
@@ -459,7 +578,7 @@ function makeTemplates(raw, crop, wide = true) {
     const key = s + "-" + e;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(resampleNorm(raw.slice(s, e + 1), GEST_N));
+    out.push(resampleNorm(raw.slice(s, e + 1), GEST_N, invariant));
   }
   return out;
 }
@@ -467,22 +586,32 @@ function makeTemplates(raw, crop, wide = true) {
 // The full template set for a move: the crop-variant templates of EVERY example
 // pooled together. With multiple examples we lean on the real captures for
 // robustness and take just the tighter variants of each (see makeTemplates).
-function buildTemplates(examples) {
+function buildTemplates(examples, invariant = false) {
   const wide = examples.length <= 1;
   const out = [];
   for (const ex of examples) {
     if (!ex || !Array.isArray(ex.raw) || ex.raw.length < 2) continue;
-    for (const t of makeTemplates(ex.raw, ex.crop, wide)) out.push(t);
+    for (const t of makeTemplates(ex.raw, ex.crop, wide, invariant)) out.push(t);
   }
   return out;
+}
+
+// Best (minimum) DTW distance of a candidate against a set of templates. For
+// grip-invariant matching the candidate is tried in all four proper sign
+// flips, since its canonical frame is only determined up to one of them.
+function bestTemplateDist(cand, templates, invariant) {
+  const cands = invariant ? properFlips(cand) : [cand];
+  let best = Infinity;
+  for (const t of templates) {
+    for (const c of cands) { const d = dtwDist(c, t); if (d < best) best = d; }
+  }
+  return best;
 }
 
 // Best (minimum) DTW distance of a candidate against all of a move's templates.
 function gestureDist(norm, g) {
   const ts = (g.templates && g.templates.length) ? g.templates : (g.template ? [g.template] : []);
-  let best = Infinity;
-  for (const t of ts) { const d = dtwDist(norm, t); if (d < best) best = d; }
-  return best;
+  return bestTemplateDist(norm, ts, !!g.rotInvariant);
 }
 
 // Find the active span of a raw capture using a scale-free activity measure
@@ -549,56 +678,116 @@ function dtwDist(a, b) {
 // SEG_START (pulling in ~SEG_PREROLL ms of preceding frames so the wind-up is
 // kept) and ends after SEG_HOLD ms back under SEG_END. Trailing stillness is
 // trimmed so a slow settle at the end doesn't skew the template.
-function handleSegment(now, feat) {
-  const act = gestActivity;
-  if (!seg) {
+function handleSegment(pipe, now, feat) {
+  const act = pipe.activity;
+  if (!pipe.seg) {
     if ((recordingGesture || gestures.length) && act > SEG_START) {
       const lo = now - SEG_PREROLL;
-      seg = { frames: histFrames.filter((h) => h.t >= lo).slice(), peak: act };
-      segLastActive = now;
+      pipe.seg = { frames: pipe.hist.filter((h) => h.t >= lo).slice(), peak: act, fired: false, triedUpTo: -1 };
+      pipe.segLastActive = now;
     }
     return;
   }
+  const seg = pipe.seg;
   seg.frames.push({ t: now, feat });
   if (act > seg.peak) seg.peak = act;
-  if (act > SEG_END) segLastActive = now;
-  if (now - segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
-    const all = seg.frames;
-    const peak = seg.peak;
-    seg = null;
-    const kept = all.filter((h) => h.t <= segLastActive + 120);
+  if (act > SEG_END) pipe.segLastActive = now;
+
+  // Early recognition: after SEG_EARLY_MS of stillness the trailing window is
+  // full, so fire the match now instead of sitting out the rest of SEG_HOLD —
+  // this cuts move-end→sound latency from ~400ms to ~120ms. If the stillness
+  // was actually a mid-move pause, the segment keeps growing and (if nothing
+  // fired) gets one more attempt on the fuller data; a pause the player can
+  // see reads as the end of a move, and the per-move cooldown covers the rest.
+  // Recording is latency-insensitive and still captures on the full close.
+  if (!recordingGesture && !seg.fired && seg.triedUpTo !== pipe.segLastActive
+      && act <= SEG_END && now - pipe.segLastActive >= SEG_EARLY_MS) {
+    seg.triedUpTo = pipe.segLastActive;
+    const kept = seg.frames.filter((h) => h.t <= pipe.segLastActive + SEG_TAIL);
+    const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS && seg.peak >= SEG_PEAK_MIN) {
+      if (recognize(kept.map((h) => h.feat), durMs)) seg.fired = true;
+    }
+  }
+
+  if (now - pipe.segLastActive > SEG_HOLD || now - seg.frames[0].t > SEG_MAX) {
+    pipe.seg = null;
+    // Already matched (or attempted) on exactly this data during the early
+    // pass and nothing new arrived since — don't fire or log a second time.
+    if (!recordingGesture && (seg.fired || seg.triedUpTo === pipe.segLastActive)) return;
+    const kept = seg.frames.filter((h) => h.t <= pipe.segLastActive + SEG_TAIL);
     const durMs = kept.length ? kept[kept.length - 1].t - kept[0].t : 0;
     // Require a clear activity peak so drift that just grazes SEG_START then
     // fades is rejected rather than matched as a (garbage) move.
-    if (kept.length >= 6 && durMs >= SEG_MIN_MS && peak >= SEG_PEAK_MIN) {
-      processSegment(kept.map((h) => h.feat));
+    if (kept.length >= 6 && durMs >= SEG_MIN_MS && seg.peak >= SEG_PEAK_MIN) {
+      processSegment(kept.map((h) => h.feat), durMs);
     }
   }
 }
 
-function processSegment(frames) {
+function processSegment(frames, durMs) {
   if (recordingGesture) {
     // Each completed burst is one example. We keep capturing until the user
     // clicks to finish, so one recording session can gather several reps that
     // together build a more reliable trigger.
-    recordingGesture.examples.push(frames);   // frames are raw 0..1 rows
+    recordingGesture.examples.push({ rows: frames, durMs });   // raw 0..1 rows
     updateRecMoveBtn();
     if (recordingGesture.targetId) updateExampleAddBtn();
     logEvent(`<b>GESTURE</b> captured example ${recordingGesture.examples.length} — repeat or finish`, "note");
   } else {
-    recognize(resampleNorm(frames, GEST_N));
+    recognize(frames, durMs);
   }
 }
 
-function recognize(norm) {
-  let best = null;
+// A winner must beat the runner-up by this much (avg per-step DTW distance)
+// whenever the runner-up could itself have fired — a near-tie between two
+// armed moves is genuinely ambiguous, and firing a coin-flip winner reads as
+// random misfires. Runners-up over their own threshold don't block: they were
+// never a plausible alternative.
+const GEST_MARGIN = 0.05;
+
+// DTW plus fixed-length resampling deliberately erase tempo — but that means a
+// slow sweep and a quick flick with the same shape are otherwise identical.
+// Compare the candidate's wall-clock duration against the range seen across
+// the move's examples; the factor is loose (2×) since DTW already absorbs
+// local timing and honest reps vary. Examples saved before durations were
+// recorded have none, so legacy moves skip the gate.
+const GEST_DUR_RATIO = 2;
+function durationOk(g, durMs) {
+  if (!(durMs > 0)) return true;
+  const durs = gestureExamples(g).map((ex) => ex.durMs).filter((d) => typeof d === "number" && d > 0);
+  if (!durs.length) return true;
+  return durMs >= Math.min(...durs) / GEST_DUR_RATIO
+      && durMs <= Math.max(...durs) * GEST_DUR_RATIO;
+}
+
+// Match a candidate against every move; returns the gesture that fired (or
+// null) so the segmenter can tell whether an early attempt landed.
+function recognize(frames, durMs) {
+  const plain = resampleNorm(frames, GEST_N);
+  let canon = null;   // built lazily: only when some move matches grip-invariantly
+  let best = null, second = null, fired = null;
   for (const g of gestures) {
+    const norm = g.rotInvariant ? (canon ??= resampleNorm(frames, GEST_N, true)) : plain;
     const d = gestureDist(norm, g);
-    g._dist = d;
-    if (!best || d < best.d) best = { g, d };
+    g._dist = d;    // shown in the list/editor even when the duration gate skips it
+    if (!durationOk(g, durMs)) continue;
+    if (!best || d < best.d) { second = best; best = { g, d }; }
+    else if (!second || d < second.d) second = { g, d };
   }
-  if (best && best.d <= best.g.threshold) fireGesture(best.g, best.d);
+  if (best && best.d <= best.g.threshold) {
+    const ambiguous = !!second
+      && second.d - best.d < GEST_MARGIN
+      && second.d <= second.g.threshold;
+    if (ambiguous) {
+      logEvent(`<b>GESTURE</b> ambiguous — ${escHtml(best.g.name)} d=${best.d.toFixed(2)} vs ${escHtml(second.g.name)} d=${second.d.toFixed(2)} · not firing`, "note");
+    } else {
+      fireGesture(best.g, best.d);
+      fired = best.g;
+    }
+  }
   renderGestures();
+  return fired;
 }
 
 function fireGesture(g, d) {
@@ -652,20 +841,49 @@ function unregisterGestureParam(id) {
   }
 }
 
-// Recompute a gesture's derived templates from its current examples (called
-// after adding, deleting, or re-cropping an example).
-function refreshGestureTemplates(g) {
+// With two or more real examples we can measure the move's own run-to-run
+// spread: leave each example out in turn and score it against the templates
+// built from the rest — exactly how a genuine performance will be scored at
+// recognition time. The threshold then sits a comfortable margin above that
+// spread instead of at a one-size-fits-all default: tight, repeatable moves
+// get a strict threshold, sloppy expressive ones a loose one. A hand-moved
+// sensitivity slider flips the move to manual and wins from then on.
+function autoThreshold(g) {
   const exs = gestureExamples(g);
-  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
-  g.templates = buildTemplates(exs);
+  if (exs.length < 2) return null;
+  const inv = !!g.rotInvariant;
+  const dists = [];
+  for (let i = 0; i < exs.length; i++) {
+    const probe = makeTemplate(exs[i].raw, exs[i].crop, inv);
+    const best = bestTemplateDist(probe, buildTemplates(exs.filter((_, j) => j !== i), inv), inv);
+    if (Number.isFinite(best)) dists.push(best);
+  }
+  if (!dists.length) return null;
+  const mean = dists.reduce((a, b) => a + b, 0) / dists.length;
+  const worst = Math.max(...dists);
+  // Enough headroom that a typical rep clears comfortably, without opening the
+  // door to everything: 1.6× the mean spread, or 1.2× the worst rep if larger.
+  return Math.min(GEST_THRESH_MAX, Math.max(GEST_THRESH_MIN, Math.max(mean * 1.6, worst * 1.2)));
 }
 
-// Create a move from one or more example captures (each a list of raw 0..1
-// feature rows). Passing several examples — repeated live or cropped out of one
-// recording — builds a more robust trigger than a single take.
-function saveGesture(name, exampleFrames) {
-  const examples = (Array.isArray(exampleFrames[0]?.[0]) ? exampleFrames : [exampleFrames])
-    .map(makeExample);
+// Recompute a gesture's derived templates from its current examples (called
+// after adding, deleting, or re-cropping an example) and — unless the user has
+// taken manual control of the slider — recalibrate its match threshold.
+function refreshGestureTemplates(g) {
+  const exs = gestureExamples(g);
+  const inv = !!g.rotInvariant;
+  g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop, inv) : null;
+  g.templates = buildTemplates(exs, inv);
+  const auto = autoThreshold(g);
+  if (auto !== null && !g.thresholdManual) g.threshold = auto;
+}
+
+// Create a move from one or more example captures (each { rows, durMs }, where
+// rows is the raw 0..1 feature rows of one performance). Passing several
+// examples — repeated live or cropped out of one recording — builds a more
+// robust trigger than a single take.
+function saveGesture(name, exampleCaptures) {
+  const examples = exampleCaptures.map(makeExample);
   const g = {
     id: "g" + Date.now().toString(36),
     name: name || `Move ${gestures.length + 1}`,
@@ -686,9 +904,9 @@ function saveGesture(name, exampleFrames) {
   return g;
 }
 
-// Append example captures (lists of raw rows) to an existing move and rebuild.
-function addExamplesToGesture(g, exampleFrames) {
-  for (const frames of exampleFrames) g.examples.push(makeExample(frames));
+// Append example captures ({ rows, durMs } each) to an existing move and rebuild.
+function addExamplesToGesture(g, exampleCaptures) {
+  for (const ex of exampleCaptures) g.examples.push(makeExample(ex));
   refreshGestureTemplates(g);
   persistGestures();
   renderGestures();
@@ -707,9 +925,12 @@ function deleteGesture(id) {
 function serializeGestures() {
   return gestures.map((g) => ({
     id: g.id, name: g.name, color: g.color,
-    threshold: g.threshold, cooldown: g.cooldown, seqGap: g.seqGap,
+    threshold: g.threshold, thresholdManual: !!g.thresholdManual,
+    rotInvariant: !!g.rotInvariant,
+    cooldown: g.cooldown, seqGap: g.seqGap,
     examples: gestureExamples(g).map((ex) => ({
       crop: ex.crop,
+      durMs: typeof ex.durMs === "number" ? Math.round(ex.durMs) : undefined,
       raw: ex.raw.map((r) => r.map((v) => +v.toFixed(4))),   // round to keep JSON small
     })),
   }));
@@ -725,7 +946,8 @@ function exampleFromData(e) {
     ? { start: Math.max(0, Math.min(RAW_N - 1, e.crop.start)), end: Math.max(0, Math.min(RAW_N - 1, e.crop.end)) }
     : { start: 0, end: RAW_N - 1 };
   if (crop.end <= crop.start) crop = { start: 0, end: RAW_N - 1 };
-  return { raw, crop };
+  const durMs = typeof e.durMs === "number" && e.durMs > 0 ? e.durMs : null;
+  return { raw, crop, durMs };
 }
 
 // Rebuild a full gesture (with computed templates) from stored/profile data.
@@ -749,6 +971,12 @@ function gestureFromData(g) {
     id: g.id, name: g.name || "Move",
     color: g.color || GEST_PALETTE[0],
     threshold: typeof g.threshold === "number" ? g.threshold : GEST_THRESH_DEFAULT,
+    // Entries saved before auto-calibration have no flag; a stored threshold
+    // that differs from the old default means the user moved the slider.
+    thresholdManual: typeof g.thresholdManual === "boolean"
+      ? g.thresholdManual
+      : typeof g.threshold === "number" && Math.abs(g.threshold - GEST_THRESH_DEFAULT) > 1e-6,
+    rotInvariant: !!g.rotInvariant,
     cooldown: typeof g.cooldown === "number" ? g.cooldown : 500,
     seqGap: typeof g.seqGap === "number" ? g.seqGap : SEQ_GAP_DEFAULT,
     examples,
@@ -787,7 +1015,8 @@ function toggleRecordMove() {
     `Move ${gestures.length + 1}`) || "").trim();
   if (!name) return;
   recordingGesture = { name, targetId: null, examples: [] };
-  seg = null; // start fresh; the next bursts of motion become the examples
+  // Start fresh; the next bursts of motion become the examples.
+  for (const id in gestPipes) gestPipes[id].seg = null;
   updateRecMoveBtn();
 }
 
@@ -896,6 +1125,7 @@ function openGestureEditor(id) {
   els.geName.value = g.name;
   els.geSens.value = threshToSens(g.threshold);
   els.geCool.value = g.cooldown || 500;
+  els.geRot.checked = !!g.rotInvariant;
   renderExampleStrip();
   updateExampleAddBtn();
   updateEditorSettingLabels();
@@ -943,7 +1173,7 @@ function toggleAddExample() {
   if (!g) return;
   if (recordingGesture) { finishRecordMove(); return; }
   recordingGesture = { name: g.name, targetId: g.id, examples: [] };
-  seg = null;
+  for (const id in gestPipes) gestPipes[id].seg = null;
   updateRecMoveBtn();
   updateExampleAddBtn();
 }
@@ -966,6 +1196,10 @@ function deleteEditingExample() {
 function updateEditorSettingLabels() {
   const g = editingGesture;
   if (!g) return;
+  // Keep the slider in step: auto-calibration can move the threshold whenever
+  // the examples change (the round-trip through threshToSens is exact, so this
+  // never fights the user's own drag).
+  els.geSens.value = threshToSens(g.threshold);
   els.geSensVal.textContent = threshToSens(g.threshold);
   els.geCoolVal.textContent = `${Math.round(g.cooldown || 500)} ms`;
   els.geThreshShow.textContent = g.threshold.toFixed(2);
@@ -2215,20 +2449,20 @@ function onMidiMessage(e) {
     if (d1 === 7) return;
     const id = (e.target && e.target.id) || "_";
     const dev = deviceCc[id] || (deviceCc[id] = {});
+    const prevDev = dev[d1];
     // Roll delta is measured within a single device only.
-    if (dev[d1] !== undefined && ROLL_CHANNELS.has(d1)) {
-      rollAccum += Math.abs(d2 - dev[d1]);
+    if (prevDev !== undefined && ROLL_CHANNELS.has(d1)) {
+      rollAccum += Math.abs(d2 - prevDev);
+    }
+    // Gesture path length is per-device too, measured against the device's own
+    // previous value — never the cross-device average, which would let a
+    // second controller dilute (or fake) this ball's motion.
+    if (prevDev !== undefined && GEST_CHANNELS.has(d1)) {
+      gestPipe(id).featAccum += Math.abs(d2 - prevDev) / 127;
     }
     dev[d1] = d2;
     // Merge this controller across all bound devices for the shared value.
-    const prevAgg = cc[d1];
     cc[d1] = aggregateCc(d1);
-    // Sum the true per-message change of each gesture feature (path length),
-    // not just the net frame-to-frame difference, so quick wiggles/spins keep
-    // reading faster instead of plateauing once motion outruns 60 fps sampling.
-    if (GEST_CHANNELS.has(d1) && prevAgg !== undefined) {
-      featAccum += Math.abs(cc[d1] - prevAgg) / 127;
-    }
     const row = ensureCcRow(d1);
     row.fill.style.width = `${(cc[d1] / 127) * 100}%`;
     row.val.textContent = Math.round(cc[d1]);
@@ -2266,8 +2500,8 @@ function syncActiveInputs() {
   activeInputs = [...selectedWebInputs, ...bleInputs];
   // Drop stale per-device state so a removed controller stops contributing.
   for (const k in deviceCc) delete deviceCc[k];
+  clearGestPipes();
   rollAccum = 0;
-  featAccum = 0;
   if (activeInputs.length === 0) { setStatus(false, "disconnected"); return; }
   setStatus(true, activeInputs.length > 1 ? `connected · ${activeInputs.length}` : "connected");
   els.hint.classList.add("hide");
@@ -2359,6 +2593,7 @@ function removeBleInput(id) {
   if (idx === -1) return;
   const [port] = bleInputs.splice(idx, 1);
   delete deviceCc[id];
+  delete gestPipes[id];
   syncActiveInputs();
   logEvent(`Bluetooth ball <b>${escHtml(port.name)}</b> disconnected`);
 }
@@ -2472,7 +2707,7 @@ async function init() {
     const sl = e.target.closest(".g-sens");
     if (!sl) return;
     const g = gestures.find((x) => x.id === sl.dataset.id);
-    if (g) { g.threshold = sensToThresh(+sl.value); persistGestures(); if (editingGesture === g) updateEditorSettingLabels(); }
+    if (g) { g.threshold = sensToThresh(+sl.value); g.thresholdManual = true; persistGestures(); if (editingGesture === g) updateEditorSettingLabels(); }
   });
   els.gestureList.addEventListener("click", (e) => {
     const del = e.target.closest(".g-del");
@@ -2495,12 +2730,21 @@ async function init() {
   els.geSens.addEventListener("input", () => {
     if (!editingGesture) return;
     editingGesture.threshold = sensToThresh(+els.geSens.value);
+    editingGesture.thresholdManual = true;
     updateEditorSettingLabels(); renderGestures(); persistGesturesSoon();
   });
   els.geCool.addEventListener("input", () => {
     if (!editingGesture) return;
     editingGesture.cooldown = +els.geCool.value;
     updateEditorSettingLabels(); persistGesturesSoon();
+  });
+  els.geRot.addEventListener("change", () => {
+    if (!editingGesture) return;
+    editingGesture.rotInvariant = els.geRot.checked;
+    // Templates (and, unless manual, the auto threshold) live in whichever
+    // frame the move matches in, so both must be rebuilt on toggle.
+    refreshGestureTemplates(editingGesture);
+    updateEditorSettingLabels(); renderGestures(); persistGesturesSoon();
   });
   els.geAutoTrim.addEventListener("click", () => {
     const ex = currentExample();
@@ -2642,12 +2886,22 @@ async function init() {
       }
       st.prev = val;
     }
-    const gfeat = featureVec();
-    updateGestureActivity(now, dt, gfeat);
-    // Motion energy is the smoothed orientation-change speed, normalized 0..1.
+    // Per-device gesture pipelines: each ball runs its own activity signal and
+    // segmenter over its own feature stream.
+    let maxAct = 0;
+    for (const id in gestPipes) {
+      const pipe = gestPipes[id];
+      const feat = deviceFeature(id);
+      updateGestureActivity(pipe, now, dt, feat);
+      if (pipe.activity > maxAct) maxAct = pipe.activity;
+      handleSegment(pipe, now, feat);
+    }
+    // Motion energy is the smoothed orientation-change speed of the MOST
+    // active ball, normalized 0..1 — a second, still controller must not
+    // dilute the glow the way an averaged signal would.
+    gestActivity = maxAct;
     lastMotion = clamp1(gestActivity / MOTION_SCALE);
     audio.setMotion(lastMotion);
-    handleSegment(now, gfeat);
 
     updateInstruments();
     renderRoll();

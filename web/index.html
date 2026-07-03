@@ -179,6 +179,11 @@
       <label>retrigger gap <span id="geCoolVal" class="gedit-num"></span></label>
       <input id="geCool" type="range" min="150" max="2500" step="50" />
     </div>
+    <div class="gedit-row">
+      <label for="geRot" title="Match this move however the ball is gripped: it is compared in the trajectory's own principal axes instead of the raw X/Y/Z channels. Leave off if you rely on distinct moves that are rotations of each other (e.g. tilt-left vs tilt-forward).">grip invariant</label>
+      <input id="geRot" type="checkbox" />
+      <span class="gedit-hint">match whatever way the ball is held</span>
+    </div>
     <div class="gedit-live">
       <span>live distance <b id="geDist">—</b> · fires under <b id="geThreshShow">—</b></span>
       <span id="geMatch" class="gedit-match">MATCH</span>
@@ -192,7 +197,7 @@
     <p><strong>Connect a ball.</strong> Click <code>🔵 Connect ball</code> to pair over Bluetooth right here (Chrome or Edge) — no macOS MIDI setup needed. Already paired in <em>Audio MIDI Setup</em>? Pick its port above instead. Then bounce / shake / spin the ball.</p>
   </div>
 
-  <script src="synth.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="synth.js?v=24"></script>
+  <script src="app.js?v=24"></script>
 </body>
 </html>

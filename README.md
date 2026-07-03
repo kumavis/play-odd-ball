@@ -15,6 +15,9 @@ Once connected it appears as a MIDI input named something like `ODD 1 Bluetooth`
 
 ### Skip the pairing dance in the web visualizer
 
+The web app is deployed at **<https://kumavis.github.io/play-odd-ball/>**
+(published from `web/` by GitHub Actions on every push to `main`).
+
 The web app in [`web/`](web/) can pair a ball directly over Web Bluetooth — no
 Audio MIDI Setup required. Open the page in Chrome or Edge (over HTTPS or
 `localhost`), click **🔵 Connect ball**, and pick your ODD Ball from the browser
