@@ -18,7 +18,15 @@ frame ("HOME", pitch/roll/yaw) is defined in `docs/RECORDING-PROTOCOL.md`.
 - **CC3/CC4 coupling is axis-dependent** — anti-correlated in pitch, positively
   correlated in roll — so the CC3/CC4 pair does carry 2 DOF (it is *not* purely
   redundant, as an early look suggested).
-- **Yaw (heading, logo kept up) is not observable** on any channel.
+- **Yaw (heading) is not observable — at any tilt, and inherently so.** Rotating
+  about vertical is rotating about the gravity vector, which cannot change an
+  accelerometer's reading. Confirmed upright (A4) and at 90° tilt from two
+  different rolls (E1, E1B). The ball orients from gravity only; there is no
+  magnetometer-style heading.
+- **Direction-of-tilt gestures are ambiguous under an unknown grip.** Because grip
+  yaw is invisible, "tip away" and "tip left" can produce the same signal (Series
+  C) — orientation-invariant matching cannot rely on lean *direction* unless the
+  grip is fixed/known.
 - **The event channels work, but need fast/sharp motion and cross-talk heavily.**
   CC0 Shake, CC1 Twist, CC2 Freefall, CC6 Movement all sat at zero through the
   slow Series A; Series B triggered them. CC6 in particular is a broadband
@@ -85,19 +93,23 @@ Reading this as a **tilt-magnitude + azimuth** decomposition:
 
 ## Yaw / heading
 
-Source: `A4` (full spin about vertical, logo up), `E1` (spin about vertical at
-~90° tilt).
+Source: `A4` (full spin about vertical, logo up), `E1`/`E1B` (spin about vertical
+at ~90° tilt, from two different starting rolls).
 
 - **Upright (A4):** no channel responded — CC3 span 0.08, CC4 0.10, CC5 0.00,
-  `energy` peaked 0.07. Heading is not encoded when the logo is up.
-- **At 90° tilt (E1):** CC5 held steady at ~0.50 (tilt constant, good) while
-  CC3/CC4 barely moved (spans < 0.2, no full azimuth sweep). This is consistent
-  with heading being unobservable off-vertical too — **but** `roll_rate` stayed
-  ~0.01–0.12 throughout, so the intended plumb-vertical 360° spin may not have
-  been cleanly executed. Leaning "not observable," not yet confirmed; E1 is worth
-  a redo with a deliberate spin (watch CC5 stay put while heading changes).
-- Working conclusion: **heading is not recoverable.** Any yaw-only gesture is
-  invisible, and orientation-neutral matching cannot rely on yaw.
+  `energy` peaked 0.07.
+- **At 90° tilt (E1, E1B):** in both runs CC5 held steady at ~0.50 (tilt kept at
+  ~90°) while CC3/CC4 only wandered ±~0.1 (imperfect hand-holding, not an azimuth
+  sweep), and `roll_rate` stayed ~0.02–0.13 — i.e. the sensor saw essentially no
+  motion even though the ball was physically spun 360°.
+- **Why this is fundamental (not an execution artifact):** a pure yaw is a
+  rotation *about the vertical/gravity axis*. An accelerometer reports gravity in
+  the body frame, and rotating a vector about its own axis leaves it unchanged, so
+  the accel reading — and therefore CC3/CC4/CC5 — is invariant under yaw at **any**
+  tilt. The near-zero `roll_rate` is expected: the CCs truly aren't changing.
+- **Conclusion: heading is not recoverable, period.** The device orients from
+  gravity only (no magnetometer). Any yaw-only gesture is invisible, and
+  orientation-neutral matching cannot use heading.
 
 ## Event channels (CC0, CC1, CC2, CC6)
 
@@ -142,17 +154,50 @@ Source: `D1` (resting on a towel, 30 s), `D2` (held still in hand, 15 s).
 - Implication: real motion sits far above the noise, so gesture thresholds can be
   aggressive; there is no meaningful idle drift to filter.
 
-## Gesture-matching material (Series C + custom)
+## Gesture matching & orientation invariance (Series C)
 
-Not analytic findings yet — raw material captured for building/validating an
-orientation-invariant matcher:
+Source: `C1`–`C5`, the same "tip the ball ~90° and back" arm move (~5+ clean reps
+each). C1–C3 are *positives* (same move, different grip); C4–C5 are *negatives*
+(different tilt direction). Per-rep features (energy = speed, ΔCC5 = tilt
+magnitude, lean-azimuth = `atan2(CC4−.5, CC3−.5)` at peak tilt):
 
-- **`C1`–`C5`:** the tip-away move in different grips (positives C1–C3) and
-  different directions (negatives C4–C5). Each has ≥ 5 reps. As expected, the raw
-  CC trajectories differ between grips (e.g. peak-tilt lean-azimuth ranges from
-  +40° to +139° across the positives) — that difference is exactly what an
-  invariant matcher must learn to ignore. Evaluating a matcher on these is TODO.
-- **`home-grip-twist` (custom):** a repeated slow "doorknob" double-twist
+| Rec | Grip / move | peak energy | ΔCC5 | lean-azimuth @ peak |
+| --- | --- | --- | --- | --- |
+| C1 | HOME, tip **away** (pos base) | 0.21 | 0.35 | **+135° ± 4** |
+| C2 | rotated-in-hand, tip away (pos) | 0.23 | 0.37 | **+43° ± 3** |
+| C3 | flipped (logo down), tip away (pos) | 0.25 | 0.45 | **−56° ± 23** |
+| C4 | HOME, tip **toward** (neg mirror) | 0.27 | 0.45 | **−46° ± 1** |
+| C5 | HOME, tip **left** (neg sideways) | 0.23 | 0.48 | **+47° ± 3** |
+
+Findings:
+
+- **Magnitude features are direction-blind.** peak energy (0.21–0.27) and ΔCC5
+  (0.35–0.48) are nearly identical across *all five* — every rep is "a ~90° tip at
+  similar speed." Speed/tilt-magnitude alone cannot tell any of these apart.
+- **Raw lean-azimuth does NOT separate positives from negatives.** The three
+  positives land at wildly different azimuths (+135°, +43°, −56°), while positive
+  **C2 (+43°) collides with negative C5 (+47°)**, and positive C3 (−56°) sits
+  right next to negative C4 (−46°). In raw CC space, same-gesture and
+  different-gesture reps are interleaved.
+- **The grip can't be pre-registered from the rest pose.** C1, C2, C4, C5 all rest
+  at CC3≈0.5, CC4≈0.5, CC5≈0.00 — *identical* (all logo-up). Only C3 (flipped, CC5
+  ≈0.99) is distinguishable at rest. So a matcher can't normalize by reading the
+  grip before the move.
+- **Root cause = the yaw blind spot.** C1 and C2 differ only by a spin about the
+  (vertical) logo axis — an unobservable yaw — yet the same physical "tip away"
+  then reads as +135° vs +43°. Equivalently, "tip away with a yawed grip" and "tip
+  left with HOME grip" are the *same* motion up to an invisible yaw, so the ball
+  literally cannot distinguish them (C2 ≈ C5).
+
+**Implications for a matcher:** with the ball held logo-up in an unknown yaw,
+lean-*direction* discrimination is impossible; usable invariants are the
+tilt-*magnitude* profile, the speed/energy profile, and any multi-phase temporal
+structure of the gesture. Reliable direction discrimination requires a
+fixed/known grip (or a gesture that itself establishes a tilt reference first).
+
+## Custom recordings
+
+- **`home-grip-twist`:** a repeated slow "doorknob" double-twist
   performed continuously around a full arm-extended pitch loop (arm down → up →
   over → back). Finding: the twist **recurs at all arm pitches** (good for
   orientation independence) but registers only weakly on CC1 (peak 0.17) and its
@@ -180,14 +225,16 @@ Source: `data/B3-raw.txt` (full-rate `listen.py --raw` capture).
 
 - Recordings live in `data/`: Series A (`A1`–`A5`, `A5B`), Series B
   (`B1-pitch`, `B1-roll`, `B1-roll2`, `B2`, `B3` + `B3-raw.txt`, `B4`–`B7`),
-  Series C (`C1`–`C5`), noise floor (`D1`, `D2`), Series E (`E1`, `E4-raw.txt`),
-  and the custom `home-grip-twist`.
+  Series C (`C1`–`C5`), noise floor (`D1`, `D2`), Series E (`E1`, `E1B`,
+  `E4-raw.txt`), and the custom `home-grip-twist`.
 - Session JSON files come from the web app's **⏺ Record** button; `*-raw.txt`
   from `.venv/bin/python listen.py --raw` (or the new **⏺ Raw** button).
 - Analysis was per-channel spans, single-step deltas (wrap test), cross-channel
   correlation, and single-cycle sinusoid fits on the slow calibration sweeps.
-- Not yet done: C2/C3 grip positives beyond spans, D-drift over long runs, and
-  Series E's E2 (tilt staircase) / E3 (cone) were not recorded.
+- The Series C analysis used per-rep energy-threshold segmentation, with peak-tilt
+  lean-azimuth and ΔCC5 per rep.
+- Not yet done: D-drift over long runs; Series E's E2 (tilt staircase) / E3 (cone)
+  were not recorded.
 
 ## Caveats / open questions
 
@@ -202,8 +249,6 @@ Source: `data/B3-raw.txt` (full-rate `listen.py --raw` capture).
   worth confirming with a rotation about a perfectly horizontal axis.
 - The azimuth decode assumes a single-axis lean; a compound tilt (pitch+roll at
   once, as in B2) should be checked against the `atan2` recipe.
-- **E1 (yaw at tilt) is inconclusive** — redo with a clear vertical-axis spin to
-  confirm heading is unobservable off-vertical.
-- The Series C matcher evaluation (do positives cluster, negatives separate?) has
-  not been run yet.
+- Yaw-at-tilt is now **resolved** (E1 + E1B + the gravity-axis argument): heading
+  is unobservable at any tilt.
 - CC7 is MIDI Volume per `docs/MIDI.md` and was not exercised here.
