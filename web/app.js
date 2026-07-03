@@ -68,6 +68,8 @@ const els = {
   geCool: document.getElementById("geCool"),
   geCoolVal: document.getElementById("geCoolVal"),
   geDist: document.getElementById("geDist"),
+  geAttempts: document.getElementById("geAttempts"),
+  geAttemptInfo: document.getElementById("geAttemptInfo"),
   geThreshShow: document.getElementById("geThreshShow"),
   geMatch: document.getElementById("geMatch"),
   geDelete: document.getElementById("geDelete"),
@@ -803,21 +805,37 @@ function arcOk(g, arc) {
 // flagged rotInvariant opts out of tiebreaking (it is performed in arbitrary
 // grips, so its axis distance is meaningless); ties involving it stay
 // ambiguous and are logged instead of coin-flipped.
+// Ring buffer of recent recognition attempts per move, for the editor's
+// debug strip: every completed motion segment is scored against every move,
+// and knowing WHY it didn't fire (gated on duration/arc, too far, lost a
+// tiebreak, ambiguous) is the difference between tuning and guessing.
+const GEST_ATTEMPTS_MAX = 12;
+function recordAttempt(g, entry) {
+  const buf = g._attempts || (g._attempts = []);
+  buf.push(entry);
+  if (buf.length > GEST_ATTEMPTS_MAX) buf.shift();
+}
+
 function recognize(frames, durMs) {
   const axisNorm = resampleNorm(frames, GEST_N);   // grip-dependent view (tiebreaks)
   const inv = invariantProfile(frames);            // orientation-neutral view (primary)
   let best = null, second = null, fired = null;
+  const evals = [];
   for (const g of gestures) {
     const d = invGestureDist(inv.profile, g);
     g._dist = d;    // shown in the list/editor even when the gates skip it
     g._distAxis = axisGestureDist(axisNorm, g);
-    if (!durationOk(g, durMs) || !arcOk(g, inv.arc)) continue;
+    const durOkay = durationOk(g, durMs);
+    const arcOkay = arcOk(g, inv.arc);
+    evals.push({ g, d, durOkay, arcOkay });
+    if (!durOkay || !arcOkay) continue;
     // Only moves under their own threshold compete: a strict move that itself
     // fails to qualify must not shadow a looser rival that would have fired.
     if (d > g.threshold) continue;
     if (!best || d < best.d) { second = best; best = { g, d }; }
     else if (!second || d < second.d) second = { g, d };
   }
+  let ambiguous = false;
   if (best) {
     const nearTie = !!second && second.d - best.d < GEST_MARGIN;
     if (!nearTie) {
@@ -831,9 +849,23 @@ function recognize(frames, durMs) {
         fireGesture(w.g, w.d);
         fired = w.g;
       } else {
+        ambiguous = true;
         logEvent(`<b>GESTURE</b> ambiguous — ${escHtml(best.g.name)} d=${best.d.toFixed(2)} vs ${escHtml(second.g.name)} d=${second.d.toFixed(2)} · not firing`, "note");
       }
     }
+  }
+  const now = performance.now();
+  for (const ev of evals) {
+    const outcome =
+      !ev.durOkay ? "gate-duration" :
+      !ev.arcOkay ? "gate-arc" :
+      ev.d > ev.g.threshold ? "far" :
+      fired === ev.g ? "fired" :
+      ambiguous ? "ambiguous" : "lost";
+    recordAttempt(ev.g, {
+      t: now, d: ev.d, dAxis: ev.g._distAxis,
+      arc: inv.arc, durMs, threshold: ev.g.threshold, outcome,
+    });
   }
   renderGestures();
   return fired;
@@ -856,12 +888,49 @@ function fireGesture(g, d) {
   }
 }
 
-// Reflect the editing gesture's latest live match distance in the editor.
+// Reflect the editing gesture's latest live match distance in the editor, and
+// re-render the attempt-history strip whenever a new attempt lands.
+let editorAttemptsAt = 0;
 function updateEditorLive() {
   const g = editingGesture;
   if (!g) return;
   els.geDist.textContent = typeof g._dist === "number" ? g._dist.toFixed(2) : "—";
   els.geDist.style.color = (typeof g._dist === "number" && g._dist <= g.threshold) ? "var(--good)" : "";
+  const buf = g._attempts;
+  const last = buf && buf.length ? buf[buf.length - 1] : null;
+  if (last && last.t !== editorAttemptsAt) {
+    editorAttemptsAt = last.t;
+    renderEditorAttempts(g);
+  }
+}
+
+const ATTEMPT_LABEL = {
+  fired: "fired",
+  lost: "lost tiebreak to another move",
+  ambiguous: "ambiguous with another move",
+  far: "too far from the examples",
+  "gate-duration": "duration outside the examples' range",
+  "gate-arc": "sweep (arc) outside the examples' range",
+};
+
+// Bars for the recent attempts: taller = closer to the examples; green fired,
+// amber qualified-but-not-fired, red too far, hollow with a letter = gated.
+function renderEditorAttempts(g) {
+  const buf = g._attempts || [];
+  els.geAttempts.innerHTML = buf.map((a) => {
+    const ratio = Math.min(2, a.d / Math.max(a.threshold, 1e-6));   // 1.0 = at threshold
+    const h = Math.round(6 + (1 - ratio / 2) * 30);
+    const cls = a.outcome === "fired" ? "at--fired"
+      : (a.outcome === "lost" || a.outcome === "ambiguous") ? "at--close"
+      : a.outcome.startsWith("gate") ? "at--gated" : "at--far";
+    const letter = a.outcome === "gate-duration" ? "t" : a.outcome === "gate-arc" ? "a" : "";
+    const tip = `d=${a.d.toFixed(2)} (fires under ${a.threshold.toFixed(2)}) · sweep ${a.arc.toFixed(2)} · ${Math.round(a.durMs)} ms · grip d=${a.dAxis.toFixed(2)} — ${ATTEMPT_LABEL[a.outcome] || a.outcome}`;
+    return `<span class="at ${cls}" style="height:${h}px" title="${tip}">${letter}</span>`;
+  }).join("");
+  const a = buf[buf.length - 1];
+  els.geAttemptInfo.textContent = a
+    ? `last: d ${a.d.toFixed(2)} / ${a.threshold.toFixed(2)} · sweep ${a.arc.toFixed(2)} · ${Math.round(a.durMs)} ms · ${ATTEMPT_LABEL[a.outcome] || a.outcome}`
+    : "perform the move to see how close each attempt scores";
 }
 
 // ---- Gesture storage + patch-bay integration ----------------------------
@@ -897,19 +966,25 @@ function unregisterGestureParam(id) {
 // spread instead of at a one-size-fits-all default: tight, repeatable moves
 // get a strict threshold, sloppy expressive ones a loose one. A hand-moved
 // sensitivity slider flips the move to manual and wins from then on.
-function autoThreshold(g) {
-  const exs = gestureExamples(g);
+// Leave-one-out fit per example: how far each real capture lands from the
+// templates built from the OTHER examples — exactly how a live performance is
+// scored. This powers both threshold auto-calibration and the per-example
+// badges in the editor (a capture that disagrees with its siblings sticks
+// out as the one to re-crop or delete).
+function looFits(exs) {
   if (exs.length < 2) return null;
-  const dists = [];
-  for (let i = 0; i < exs.length; i++) {
-    const ex = exs[i];
+  return exs.map((ex, i) => {
     const a = ex.raw.slice(ex.crop.start, ex.crop.end + 1);
     const probe = invariantProfile(a.length >= 2 ? a : ex.raw).profile;
     const others = buildInvTemplates(exs.filter((_, j) => j !== i));
     let best = Infinity;
     for (const t of others) { const d = dtwDist(probe, t.profile); if (d < best) best = d; }
-    if (Number.isFinite(best)) dists.push(best);
-  }
+    return Number.isFinite(best) ? best : null;
+  });
+}
+
+function autoThreshold(g) {
+  const dists = (g._exFit || []).filter((d) => typeof d === "number");
   if (!dists.length) return null;
   const mean = dists.reduce((a, b) => a + b, 0) / dists.length;
   const worst = Math.max(...dists);
@@ -928,6 +1003,7 @@ function refreshGestureTemplates(g) {
   g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
   g.templates = buildTemplates(exs);
   g.invTemplates = buildInvTemplates(exs);
+  g._exFit = looFits(exs);
   const auto = autoThreshold(g);
   if (auto !== null && !g.thresholdManual) g.threshold = auto;
 }
@@ -1183,6 +1259,8 @@ function openGestureEditor(id) {
   renderExampleStrip();
   updateExampleAddBtn();
   updateEditorSettingLabels();
+  editorAttemptsAt = 0;      // re-render this move's attempt history
+  renderEditorAttempts(g);
   els.gestureEditor.classList.remove("gedit--hidden");
   els.gestureBackdrop.classList.remove("gedit-backdrop--hidden");
   drawGestureEditor();
@@ -1203,9 +1281,20 @@ function renderExampleStrip() {
   const g = editingGesture;
   if (!g) return;
   const exs = gestureExamples(g);
-  els.geExStrip.innerHTML = exs.map((ex, i) =>
-    `<button class="gedit-ex${i === editingExample ? " is-active" : ""}" data-ex="${i}">${i + 1}</button>`
-  ).join("");
+  // Each chip carries its example's leave-one-out fit: how far this capture
+  // lands from the templates built from its siblings. A chip over the move's
+  // threshold is flagged — it's the capture dragging the calibration wide.
+  els.geExStrip.innerHTML = exs.map((ex, i) => {
+    const fit = g._exFit && typeof g._exFit[i] === "number" ? g._exFit[i] : null;
+    const outlier = fit !== null && fit > g.threshold;
+    const badge = fit !== null
+      ? `<span class="gedit-ex-fit${outlier ? " is-outlier" : ""}">${fit.toFixed(2)}</span>`
+      : "";
+    const tip = fit !== null
+      ? `Example ${i + 1} · d=${fit.toFixed(2)} against the other examples${outlier ? " — disagrees with its siblings; re-crop or remove it" : ""}`
+      : `Example ${i + 1}`;
+    return `<button class="gedit-ex${i === editingExample ? " is-active" : ""}" data-ex="${i}" title="${tip}">${i + 1}${badge}</button>`;
+  }).join("");
   els.geDelExample.disabled = exs.length <= 1;
 }
 
@@ -1290,9 +1379,19 @@ function drawGestureEditor() {
   const W = cv.width, H = cv.height, pad = 8 * dpr;
   ctx.clearRect(0, 0, W, H);
 
+  // A shared value scale across ALL examples, so overlaid traces are directly
+  // comparable — each capture is one segment of the same move, not an island.
+  const exs = gestureExamples(g);
   const raw = ex.raw, crop = ex.crop, N = raw.length, D = raw[0].length;
   let mn = Infinity, mx = -Infinity;
-  for (let i = 0; i < N; i++) for (let d = 0; d < D; d++) { const v = raw[i][d]; if (v < mn) mn = v; if (v > mx) mx = v; }
+  for (const e of exs) {
+    for (let i = 0; i < e.raw.length; i++) {
+      for (let d = 0; d < D; d++) {
+        const v = e.raw[i][d];
+        if (v < mn) mn = v; if (v > mx) mx = v;
+      }
+    }
+  }
   const range = mx - mn || 1;
   const xOf = (i) => (i / (N - 1)) * W;
   const yOf = (v) => H - pad - ((v - mn) / range) * (H - pad * 2);
@@ -1309,14 +1408,27 @@ function drawGestureEditor() {
   for (let k = 0; k <= 4; k++) { const y = (k / 4) * (H - 2) + 1; ctx.moveTo(0, y); ctx.lineTo(W, y); }
   ctx.stroke();
 
-  // Per-dimension traces.
-  for (let d = 0; d < D; d++) {
-    ctx.strokeStyle = GEST_DIM_COLORS[d];
-    ctx.globalAlpha = 0.8; ctx.lineWidth = 1.4 * dpr; ctx.lineJoin = "round";
-    ctx.beginPath();
-    for (let i = 0; i < N; i++) { const x = xOf(i), y = yOf(raw[i][d]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-    ctx.stroke();
+  const drawTraces = (rows, alpha, width) => {
+    const n = rows.length;
+    for (let d = 0; d < D; d++) {
+      ctx.strokeStyle = GEST_DIM_COLORS[d];
+      ctx.globalAlpha = alpha; ctx.lineWidth = width; ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        const x = (i / (n - 1)) * W, y = yOf(rows[i][d]);
+        i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    }
+  };
+
+  // The sibling examples, ghosted underneath: run-to-run variation (and any
+  // capture that doesn't belong) is visible at a glance.
+  for (let k = 0; k < exs.length; k++) {
+    if (k !== editingExample) drawTraces(exs[k].raw, 0.14, 1 * dpr);
   }
+  // The selected example on top.
+  drawTraces(raw, 0.85, 1.4 * dpr);
   ctx.globalAlpha = 1;
 
   // Crop handles.

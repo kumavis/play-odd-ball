@@ -427,6 +427,29 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .gedit-row { display: flex; align-items: center; gap: 12px; }
 .gedit-row label { font-size: 13px; color: var(--muted); width: 150px; flex: 0 0 auto; }
 .gedit-row input[type="range"] { flex: 1 1 auto; accent-color: var(--accent-2); }
+.gedit-attempts-row { display: flex; align-items: flex-end; gap: 10px; }
+.gedit-attempts {
+  display: flex; align-items: flex-end; gap: 3px;
+  height: 38px; flex: 1 1 auto;
+  border-bottom: 1px solid var(--line);
+}
+.gedit-attempts .at {
+  width: 13px; flex: 0 0 auto;
+  border-radius: 3px 3px 0 0;
+  font-size: 8px; line-height: 1.4; color: var(--muted); text-align: center;
+}
+.at--fired { background: var(--good); }
+.at--close { background: #ffd166; }
+.at--far { background: #4a4f78; opacity: 0.8; }
+.at--gated { background: transparent; border: 1px dashed var(--line); border-bottom: 0; }
+.gedit-attempt-info { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gedit-ex-fit {
+  display: block; margin-top: 2px;
+  font-size: 8px; line-height: 1; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.gedit-ex.is-active .gedit-ex-fit { color: inherit; }
+.gedit-ex-fit.is-outlier { color: var(--warn); font-weight: 700; }
 .gedit-row input[type="checkbox"] { flex: 0 0 auto; accent-color: var(--accent-2); }
 .gedit-hint { font-size: 12px; color: var(--muted); }
 .gedit-num { color: var(--text); font-variant-numeric: tabular-nums; }
