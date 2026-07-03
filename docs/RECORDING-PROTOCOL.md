@@ -42,8 +42,9 @@ All instructions use this **HOME pose**. Sit facing your desk and hold the
 ball in front of you:
 
 - **Logo faces the ceiling** (logo up).
-- **Text upright from your point of view**: the top of the "ODD" text points
-  **away from you**.
+- **Text is legible** — right-side up as you look down at it. (Equivalently, the
+  top of the "ODD" text points away from you; that's just what "legible" looks
+  like for a ceiling-facing logo.)
 
 Axis names used below (your frame, not the ball's):
 
@@ -126,22 +127,47 @@ result is itself a valid, useful outcome to record.
 | B6 | Freefall → CC2 | 5 short drops or gentle toss-and-catch onto a cushion/bed (a few inches is plenty — protect the ball). Characterizes CC2 (Freefall). |
 | B7 | Movement → CC6 | 5 reps of picking the ball up and walking a few steps / broad whole-arm sweeps, set down still between. Characterizes CC6 (Movement) vs. plain reorientation. |
 
-## Part C — same move, different orientation (invariance material)
+## Part C — orientation-invariant matching material
 
-Goal: matched sets for building/validating orientation-neutral matching. The
-**reference move** is: *from the starting pose, tip the ball 90° away from you
-and smoothly return, about 1 second total.* Perform it identically every time —
-only the grip/facing changes. **5 reps per recording**, ≥ 2 s still between reps.
+Goal: matched sets to test gesture matching that ignores how the ball is held.
 
-| ID | Recording | Setup |
-| --- | --- | --- |
-| C1 | Reference move, HOME grip | Logo up, text away (HOME). |
-| C2 | Reference move, twisted grip | Ball rotated 90° in your hand: **logo faces you**, then perform the identical physical move. |
-| C3 | Reference move, logo down | Ball flipped: logo faces the floor. |
-| C4 | Reference move, you rotated | HOME grip, but **you turn 90° to your left** and perform the move facing that wall. (Distinguishes grip changes from facing changes.) |
-| C5 | Mirror move | HOME grip, but tip 90° **toward you** and back — the mirror image of the reference. Must **not** match C1 later. |
-| C6 | Rotated-copy move | HOME grip, tip 90° **to your left** and back. This is the classic collision pair with C1 for invariant matching — recorded so the tiebreaker can be tested. |
-| C7 | Signature curve, two grips | A lazy figure-8 traced with the logo (~2 s per rep): 5 reps in HOME grip, pause 5 s, then 5 reps with the logo facing you. High-curvature material for the curvature/torsion features. |
+**The motion.** Unless a step says otherwise, every recording is the *same* arm
+motion: **tip the ball about 90° away from you and smoothly bring it back**, ~1 s
+per rep. Make **5 reps per recording**, holding still **≥ 2 s between reps** (reps
+are split on stillness — don't rush the gaps). Sound off, port selected directly.
+
+What changes between recordings is only **how the ball sits in your hand** (C1–C3)
+or **which way you tip it** (C4–C5):
+
+- **C1–C3 are positives** — identical motion, different grip. A good matcher must
+  treat all three as the *same* gesture even though the raw CCs differ.
+- **C4–C5 are negatives** — a *different* motion in the HOME grip; they must
+  **not** match C1.
+- **C6** is separate feature material (a curved path).
+
+> Heading doesn't matter: the ball has no yaw/heading sense (see
+> [`FINDINGS.md`](FINDINGS.md)), so which way you face the room is irrelevant —
+> only the grip and the tip direction change the data.
+
+Do each of these as its own recording (5 reps):
+
+- **C1 — baseline (positive).** Hold the ball in HOME (logo up, text legible).
+  Tip it away from you and back. This is the template the rest are compared to.
+- **C2 — rotated grip (positive).** Keep the logo up, but spin the ball ~90° in
+  your hand so the **text now reads sideways**. Do the same tip-away-and-back.
+  (Same motion in the room; the ball feels it rotated → CC3/CC4 rotate, CC5 is
+  unchanged.)
+- **C3 — flipped grip (positive).** Turn the ball over so the **logo faces the
+  floor**. Do the same tip-away-and-back.
+- **C4 — mirror (negative).** HOME grip, but tip the ball **toward you** and back
+  — the opposite direction. Must stay distinct from C1.
+- **C5 — sideways (negative).** HOME grip, but tip the ball **to your left** and
+  back. This looks like a rotated C1 and is the key collision case: the matcher
+  must keep it separate from C1.
+- **C6 — figure-8 (features).** HOME grip: slowly trace a lazy figure-8 in the
+  air with the ball, ~2 s per loop, **5 loops**. Pause 5 s, then do **5 more
+  loops** with the ball rotated 90° in your hand (the C2 grip). High-curvature
+  material for curvature/torsion features.
 
 ## Part D — noise floor
 
@@ -150,18 +176,34 @@ only the grip/facing changes. **5 reps per recording**, ≥ 2 s still between re
 | D1 | Resting | Wake the ball with one gentle tap, set it on a folded towel, hands off, record 30 s. |
 | D2 | Held still | Hold the ball as still as you can in HOME pose for 15 s. |
 
+## Part E — decode validation & remaining channels (findings-driven)
+
+Follow-ups the A/B analysis showed we still need — see [`FINDINGS.md`](FINDINGS.md).
+Same global settings (sound off, port selected directly).
+
+| ID | Recording | Details |
+| --- | --- | --- |
+| E1 | Yaw at a fixed tilt | Tip the ball onto its side (~90° from vertical) and **hold that tilt** while rotating it a full 360° about the **vertical** axis (change heading only), pause 3 s, then reverse. **Why:** A4 tested yaw only while upright, where heading is degenerate. This is the real test of whether heading is observable off-vertical, and it validates the azimuth decode `atan2(CC4−0.5, CC3−0.5)`. |
+| E2 | Tilt-angle staircase | Static holds at measured tilt-from-vertical angles — **0°, 30°, 45°, 60°, 90°, 135°, 180°** — held **4 s dead still each**, moving briskly between. Use a phone level/protractor as a guide. **Why:** calibrates `CC5 = (1 − cos tilt)/2` and the CC3/CC4-vs-CC5 gain difference. |
+| E3 | Cone at fixed tilt | Hold a constant ~60° tilt and sweep the lean **direction** smoothly through a full 360° (trace a cone with the logo), ~10 s per loop, two loops. **Why:** validates the azimuth decode on continuous 2-axis motion — CC5 should stay ~constant while CC3/CC4 rotate together. |
+| E4 | Tap (Note test) | 5 distinct taps on the ball, ≥ 2 s apart. **Capture with `listen.py --raw`** — Tap/Shake/Twist arrive as MIDI **Note** messages (with velocity), and the session recorder discards notes entirely. Characterizes the Tap note number + velocity. |
+
+> Also re-capture the event tests (B4–B7) with `listen.py --raw`, not just the
+> session recorder: the JSON drops Note messages and aliases the ~405 msg/s
+> stream (see [`FINDINGS.md`](FINDINGS.md) → Message rate).
+
 ## Checklist
 
 ```
 A1  A2  A3  A4  A5                          [done]
 B1-pitch  B1-roll  B2  B3 (+ listen.py raw)   [done] transfer fn / degeneracy
 B4  B5  B6  B7                                [done, <5 reps] event channels
-C1  C2  C3  C4  C5  C6  C7
-D1  D2
+C1  C2  C3  C4  C5  C6                        invariance positives / negatives
+D1  D2                                        noise floor
+E1  E2  E3  E4 (raw)                          decode validation & Tap note
 ```
 
-Twenty-ish short recordings, ~20 minutes of work. Drop the JSON files (and
-`B3-raw.txt`) anywhere in the repo or attach them to the PR — the analysis
-scripts will take it from there.
+Drop the JSON files (and any `listen.py --raw` `.txt` captures) anywhere in the
+repo or attach them to the PR — the analysis scripts will take it from there.
 
 Results so far (Series A + B) are written up in [`FINDINGS.md`](FINDINGS.md).
