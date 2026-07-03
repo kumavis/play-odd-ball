@@ -1,0 +1,5088 @@
+{
+  "recorded": "2026-07-03T10:32:18.197Z",
+  "durationMs": 15630,
+  "params": [
+    {
+      "key": "roll_speed",
+      "label": "Roll speed"
+    },
+    {
+      "key": "roll_rate",
+      "label": "Roll rate"
+    },
+    {
+      "key": "energy",
+      "label": "Motion energy"
+    },
+    {
+      "key": "tap",
+      "label": "Tap envelope"
+    },
+    {
+      "key": "shake",
+      "label": "Shake (CC0)"
+    },
+    {
+      "key": "twist",
+      "label": "Twist (CC1)"
+    },
+    {
+      "key": "freefall",
+      "label": "Freefall (CC2)"
+    },
+    {
+      "key": "tilt_x",
+      "label": "Orient X (CC3)"
+    },
+    {
+      "key": "tilt_y",
+      "label": "Orient Y (CC4)"
+    },
+    {
+      "key": "tilt_z",
+      "label": "Orient Z (CC5)"
+    },
+    {
+      "key": "movement",
+      "label": "Movement (CC6)"
+    },
+    {
+      "key": "g:gmr4sga0m",
+      "label": "✋ Arm Catapult"
+    }
+  ],
+  "samples": [
+    {
+      "t": 58,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0254,
+        "energy": 0.0462,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.9606,
+        "tilt_z": 0.5591,
+        "movement": 0.811,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 108,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0202,
+        "energy": 0.0331,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.9606,
+        "tilt_z": 0.5591,
+        "movement": 0.811,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 158,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0272,
+        "energy": 0.0458,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.9685,
+        "tilt_z": 0.5354,
+        "movement": 0.8031,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 216,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0266,
+        "energy": 0.0423,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.6457,
+        "tilt_y": 0.9685,
+        "tilt_z": 0.5354,
+        "movement": 0.8031,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 267,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.047,
+        "energy": 0.0826,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.6063,
+        "tilt_y": 0.9764,
+        "tilt_z": 0.5591,
+        "movement": 0.7953,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 317,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0525,
+        "energy": 0.0901,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.5827,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.5512,
+        "movement": 0.7953,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 367,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0636,
+        "energy": 0.1102,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.5512,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.5748,
+        "movement": 0.7874,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 425,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0613,
+        "energy": 0.1008,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.5984,
+        "movement": 0.7874,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 475,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0723,
+        "energy": 0.1233,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.4961,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.6063,
+        "movement": 0.7795,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 525,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0576,
+        "energy": 0.0884,
+        "tap": 0,
+        "shake": 0,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.4961,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.6063,
+        "movement": 0.7795,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 575,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0793,
+        "energy": 0.1296,
+        "tap": 0,
+        "shake": 0.0079,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.5591,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.5748,
+        "movement": 0.7717,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 625,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0747,
+        "energy": 0.1162,
+        "tap": 0,
+        "shake": 0.0157,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.9843,
+        "tilt_z": 0.5591,
+        "movement": 0.7717,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 683,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0717,
+        "energy": 0.108,
+        "tap": 0,
+        "shake": 0.0315,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.5512,
+        "tilt_y": 0.9921,
+        "tilt_z": 0.5354,
+        "movement": 0.7638,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 733,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1722,
+        "energy": 0.3184,
+        "tap": 0,
+        "shake": 0.063,
+        "twist": 0,
+        "freefall": 0,
+        "tilt_x": 0.6772,
+        "tilt_y": 0.9449,
+        "tilt_z": 0.4173,
+        "movement": 0.7638,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 783,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2117,
+        "energy": 0.387,
+        "tap": 0,
+        "shake": 0.0866,
+        "twist": 0,
+        "freefall": 0.0157,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.8976,
+        "tilt_z": 0.3071,
+        "movement": 0.7559,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 833,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4743,
+        "energy": 0.941,
+        "tap": 0,
+        "shake": 0.1181,
+        "twist": 0.0157,
+        "freefall": 0.0394,
+        "tilt_x": 0.5039,
+        "tilt_y": 0.5669,
+        "tilt_z": 0.1181,
+        "movement": 0.7559,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 892,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3639,
+        "energy": 0.6379,
+        "tap": 0,
+        "shake": 0.1496,
+        "twist": 0.0472,
+        "freefall": 0.0866,
+        "tilt_x": 0.5039,
+        "tilt_y": 0.5669,
+        "tilt_z": 0.1181,
+        "movement": 0.748,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 942,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2899,
+        "energy": 0.4571,
+        "tap": 0,
+        "shake": 0.1496,
+        "twist": 0.0472,
+        "freefall": 0.0866,
+        "tilt_x": 0.5039,
+        "tilt_y": 0.5669,
+        "tilt_z": 0.1181,
+        "movement": 0.748,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 992,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4895,
+        "energy": 0.8413,
+        "tap": 0,
+        "shake": 0.1811,
+        "twist": 0.1024,
+        "freefall": 0.0945,
+        "tilt_x": 0.5039,
+        "tilt_y": 0.5039,
+        "tilt_z": 0.7874,
+        "movement": 0.748,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1042,
+      "values": {
+        "roll_speed": 0.3061,
+        "roll_rate": 0.6496,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.2047,
+        "twist": 0.1732,
+        "freefall": 0,
+        "tilt_x": 0.5512,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2362,
+        "movement": 0.7402,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1092,
+      "values": {
+        "roll_speed": 0.2235,
+        "roll_rate": 0.6078,
+        "energy": 0.9972,
+        "tap": 0,
+        "shake": 0.2205,
+        "twist": 0.2047,
+        "freefall": 0.0236,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7402,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1149,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4674,
+        "energy": 0.6783,
+        "tap": 0,
+        "shake": 0.2362,
+        "twist": 0.2283,
+        "freefall": 0.0787,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7323,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1200,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3715,
+        "energy": 0.4844,
+        "tap": 0,
+        "shake": 0.252,
+        "twist": 0.252,
+        "freefall": 0.126,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7323,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1258,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2848,
+        "energy": 0.328,
+        "tap": 0,
+        "shake": 0.2598,
+        "twist": 0.2835,
+        "freefall": 0.1811,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7244,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1317,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2186,
+        "energy": 0.2225,
+        "tap": 0,
+        "shake": 0.2677,
+        "twist": 0.3071,
+        "freefall": 0.2362,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7244,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1367,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1742,
+        "energy": 0.1594,
+        "tap": 0,
+        "shake": 0.2677,
+        "twist": 0.3071,
+        "freefall": 0.2362,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7244,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1417,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1387,
+        "energy": 0.1142,
+        "tap": 0,
+        "shake": 0.2598,
+        "twist": 0.3307,
+        "freefall": 0.2835,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7165,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 1475,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1064,
+        "energy": 0.0775,
+        "tap": 0,
+        "shake": 0.252,
+        "twist": 0.3622,
+        "freefall": 0.3386,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7165,
+        "g:gmr4sga0m": 0.7225
+      }
+    },
+    {
+      "t": 1533,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0816,
+        "energy": 0.0525,
+        "tap": 0,
+        "shake": 0.2441,
+        "twist": 0.3858,
+        "freefall": 0.3937,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7087,
+        "g:gmr4sga0m": 0.2316
+      }
+    },
+    {
+      "t": 1592,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0626,
+        "energy": 0.0356,
+        "tap": 0.1755,
+        "shake": 0.2441,
+        "twist": 0.3858,
+        "freefall": 0.3937,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.1496,
+        "movement": 0.7087,
+        "g:gmr4sga0m": 0.0743
+      }
+    },
+    {
+      "t": 1642,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1597,
+        "energy": 0.2475,
+        "tap": 0.0815,
+        "shake": 0.2283,
+        "twist": 0.3937,
+        "freefall": 0,
+        "tilt_x": 0.5591,
+        "tilt_y": 0.7323,
+        "tilt_z": 0.1811,
+        "movement": 0.8898,
+        "g:gmr4sga0m": 0.028
+      }
+    },
+    {
+      "t": 1692,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1894,
+        "energy": 0.3076,
+        "tap": 0.0379,
+        "shake": 0.2205,
+        "twist": 0.3701,
+        "freefall": 0,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.8583,
+        "tilt_z": 0.1811,
+        "movement": 0.8819,
+        "g:gmr4sga0m": 0.0106
+      }
+    },
+    {
+      "t": 1742,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2446,
+        "energy": 0.4203,
+        "tap": 0.0176,
+        "shake": 0.2205,
+        "twist": 0.3543,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.7953,
+        "tilt_z": 0.1496,
+        "movement": 0.874,
+        "g:gmr4sga0m": 0.004
+      }
+    },
+    {
+      "t": 1800,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2363,
+        "energy": 0.3886,
+        "tap": 0.0072,
+        "shake": 0.2126,
+        "twist": 0.3386,
+        "freefall": 0,
+        "tilt_x": 0.7087,
+        "tilt_y": 0.748,
+        "tilt_z": 0.126,
+        "movement": 0.8661,
+        "g:gmr4sga0m": 0.0013
+      }
+    },
+    {
+      "t": 1850,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2958,
+        "energy": 0.5119,
+        "tap": 0.0033,
+        "shake": 0.2047,
+        "twist": 0.3228,
+        "freefall": 0,
+        "tilt_x": 0.748,
+        "tilt_y": 0.5827,
+        "tilt_z": 0.0787,
+        "movement": 0.8583,
+        "g:gmr4sga0m": 0.0005
+      }
+    },
+    {
+      "t": 1900,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2356,
+        "energy": 0.3668,
+        "tap": 0.0015,
+        "shake": 0.2047,
+        "twist": 0.3228,
+        "freefall": 0,
+        "tilt_x": 0.748,
+        "tilt_y": 0.5827,
+        "tilt_z": 0.0787,
+        "movement": 0.8583,
+        "g:gmr4sga0m": 0.0002
+      }
+    },
+    {
+      "t": 1950,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2378,
+        "energy": 0.3623,
+        "tap": 0.0007,
+        "shake": 0.1969,
+        "twist": 0.2992,
+        "freefall": 0,
+        "tilt_x": 0.8268,
+        "tilt_y": 0.5906,
+        "tilt_z": 0.1339,
+        "movement": 0.8425,
+        "g:gmr4sga0m": 0.0001
+      }
+    },
+    {
+      "t": 2000,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2014,
+        "energy": 0.2843,
+        "tap": 0.0003,
+        "shake": 0.1969,
+        "twist": 0.2835,
+        "freefall": 0,
+        "tilt_x": 0.8189,
+        "tilt_y": 0.5748,
+        "tilt_z": 0.126,
+        "movement": 0.8346,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2050,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.173,
+        "energy": 0.2298,
+        "tap": 0.0002,
+        "shake": 0.189,
+        "twist": 0.2756,
+        "freefall": 0,
+        "tilt_x": 0.811,
+        "tilt_y": 0.5906,
+        "tilt_z": 0.1181,
+        "movement": 0.8268,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2107,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.152,
+        "energy": 0.1962,
+        "tap": 0.0001,
+        "shake": 0.1811,
+        "twist": 0.2598,
+        "freefall": 0,
+        "tilt_x": 0.7953,
+        "tilt_y": 0.5748,
+        "tilt_z": 0.1024,
+        "movement": 0.8189,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2158,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.153,
+        "energy": 0.2087,
+        "tap": 0,
+        "shake": 0.1732,
+        "twist": 0.2441,
+        "freefall": 0,
+        "tilt_x": 0.7638,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.0945,
+        "movement": 0.811,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2216,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1276,
+        "energy": 0.1638,
+        "tap": 0,
+        "shake": 0.1732,
+        "twist": 0.2362,
+        "freefall": 0,
+        "tilt_x": 0.7559,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.0866,
+        "movement": 0.8031,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2267,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1015,
+        "energy": 0.117,
+        "tap": 0,
+        "shake": 0.1732,
+        "twist": 0.2362,
+        "freefall": 0,
+        "tilt_x": 0.7559,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.0866,
+        "movement": 0.8031,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2317,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1114,
+        "energy": 0.1445,
+        "tap": 0,
+        "shake": 0.1732,
+        "twist": 0.2205,
+        "freefall": 0,
+        "tilt_x": 0.7402,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.063,
+        "movement": 0.7953,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2367,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1089,
+        "energy": 0.1443,
+        "tap": 0,
+        "shake": 0.1811,
+        "twist": 0.2126,
+        "freefall": 0,
+        "tilt_x": 0.7323,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.0551,
+        "movement": 0.7874,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2425,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1444,
+        "energy": 0.2209,
+        "tap": 0,
+        "shake": 0.2047,
+        "twist": 0.1969,
+        "freefall": 0,
+        "tilt_x": 0.7638,
+        "tilt_y": 0.4173,
+        "tilt_z": 0.0866,
+        "movement": 0.7795,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2475,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2316,
+        "energy": 0.3981,
+        "tap": 0,
+        "shake": 0.2362,
+        "twist": 0.189,
+        "freefall": 0,
+        "tilt_x": 0.6299,
+        "tilt_y": 0.252,
+        "tilt_z": 0.0945,
+        "movement": 0.7717,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2533,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3584,
+        "energy": 0.6486,
+        "tap": 0,
+        "shake": 0.2835,
+        "twist": 0.1811,
+        "freefall": 0,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.0709,
+        "tilt_z": 0.2677,
+        "movement": 0.7638,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2583,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3567,
+        "energy": 0.6166,
+        "tap": 0,
+        "shake": 0.3937,
+        "twist": 0.1732,
+        "freefall": 0.0236,
+        "tilt_x": 0.5118,
+        "tilt_y": 0.0394,
+        "tilt_z": 0.3937,
+        "movement": 0.7559,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2642,
+      "values": {
+        "roll_speed": 0.2728,
+        "roll_rate": 0.6328,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.5276,
+        "twist": 0.1654,
+        "freefall": 0.0394,
+        "tilt_x": 0.4409,
+        "tilt_y": 0.4252,
+        "tilt_z": 0.811,
+        "movement": 0.748,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2692,
+      "values": {
+        "roll_speed": 0.7228,
+        "roll_rate": 0.86,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.6693,
+        "twist": 0.189,
+        "freefall": 0,
+        "tilt_x": 0.4646,
+        "tilt_y": 0.6614,
+        "tilt_z": 0.2362,
+        "movement": 0.8031,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2749,
+      "values": {
+        "roll_speed": 0.9228,
+        "roll_rate": 0.961,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.7244,
+        "twist": 0.2283,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 0.9606,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2800,
+      "values": {
+        "roll_speed": 0.5325,
+        "roll_rate": 0.7639,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.7244,
+        "twist": 0.2283,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 0.9606,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2850,
+      "values": {
+        "roll_speed": 0.2244,
+        "roll_rate": 0.6083,
+        "energy": 0.8967,
+        "tap": 0,
+        "shake": 0.7638,
+        "twist": 0.2598,
+        "freefall": 0.0551,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2908,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4667,
+        "energy": 0.608,
+        "tap": 0,
+        "shake": 0.7953,
+        "twist": 0.2913,
+        "freefall": 0.1024,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 2958,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3718,
+        "energy": 0.4356,
+        "tap": 0,
+        "shake": 0.8189,
+        "twist": 0.3228,
+        "freefall": 0.1575,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3008,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2962,
+        "energy": 0.3121,
+        "tap": 0,
+        "shake": 0.8425,
+        "twist": 0.3543,
+        "freefall": 0.2126,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3067,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2272,
+        "energy": 0.2115,
+        "tap": 0,
+        "shake": 0.8661,
+        "twist": 0.378,
+        "freefall": 0.2598,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3125,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1745,
+        "energy": 0.1437,
+        "tap": 0,
+        "shake": 0.8819,
+        "twist": 0.4094,
+        "freefall": 0.315,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3175,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1389,
+        "energy": 0.1028,
+        "tap": 0,
+        "shake": 0.8976,
+        "twist": 0.4409,
+        "freefall": 0.3701,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3225,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1107,
+        "energy": 0.0737,
+        "tap": 0,
+        "shake": 0.8976,
+        "twist": 0.4409,
+        "freefall": 0.3701,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3275,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0881,
+        "energy": 0.0527,
+        "tap": 0,
+        "shake": 0.9055,
+        "twist": 0.4646,
+        "freefall": 0.4173,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3333,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0676,
+        "energy": 0.0358,
+        "tap": 0.1134,
+        "shake": 0.9055,
+        "twist": 0.4646,
+        "freefall": 0.4173,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.2362,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3383,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1751,
+        "energy": 0.2707,
+        "tap": 0.0526,
+        "shake": 0.8898,
+        "twist": 0.4567,
+        "freefall": 0,
+        "tilt_x": 0.5276,
+        "tilt_y": 0.1969,
+        "tilt_z": 0.1575,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3433,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1768,
+        "energy": 0.2721,
+        "tap": 0.0244,
+        "shake": 0.8504,
+        "twist": 0.4331,
+        "freefall": 0,
+        "tilt_x": 0.5748,
+        "tilt_y": 0.1811,
+        "tilt_z": 0.126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3483,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1861,
+        "energy": 0.2916,
+        "tap": 0.0114,
+        "shake": 0.811,
+        "twist": 0.4094,
+        "freefall": 0,
+        "tilt_x": 0.6063,
+        "tilt_y": 0.1417,
+        "tilt_z": 0.1654,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3533,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1483,
+        "energy": 0.2089,
+        "tap": 0.0053,
+        "shake": 0.7795,
+        "twist": 0.3937,
+        "freefall": 0,
+        "tilt_x": 0.6063,
+        "tilt_y": 0.1417,
+        "tilt_z": 0.1654,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3583,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1181,
+        "energy": 0.1497,
+        "tap": 0.0024,
+        "shake": 0.7795,
+        "twist": 0.3937,
+        "freefall": 0,
+        "tilt_x": 0.6063,
+        "tilt_y": 0.1417,
+        "tilt_z": 0.1654,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3642,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1281,
+        "energy": 0.1747,
+        "tap": 0.001,
+        "shake": 0.748,
+        "twist": 0.3701,
+        "freefall": 0,
+        "tilt_x": 0.5984,
+        "tilt_y": 0.0945,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3692,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1215,
+        "energy": 0.1638,
+        "tap": 0.0005,
+        "shake": 0.7087,
+        "twist": 0.3543,
+        "freefall": 0,
+        "tilt_x": 0.5827,
+        "tilt_y": 0.1102,
+        "tilt_z": 0.1969,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3750,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1071,
+        "energy": 0.1386,
+        "tap": 0.0002,
+        "shake": 0.6772,
+        "twist": 0.3307,
+        "freefall": 0,
+        "tilt_x": 0.5748,
+        "tilt_y": 0.0945,
+        "tilt_z": 0.2126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3807,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1057,
+        "energy": 0.1415,
+        "tap": 0.0001,
+        "shake": 0.6457,
+        "twist": 0.315,
+        "freefall": 0,
+        "tilt_x": 0.5591,
+        "tilt_y": 0.0709,
+        "tilt_z": 0.2362,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3858,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1049,
+        "energy": 0.144,
+        "tap": 0,
+        "shake": 0.6142,
+        "twist": 0.2992,
+        "freefall": 0,
+        "tilt_x": 0.5827,
+        "tilt_y": 0.0866,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3908,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.096,
+        "energy": 0.1292,
+        "tap": 0,
+        "shake": 0.5906,
+        "twist": 0.2835,
+        "freefall": 0,
+        "tilt_x": 0.5669,
+        "tilt_y": 0.0787,
+        "tilt_z": 0.2283,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 3958,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0894,
+        "energy": 0.1202,
+        "tap": 0,
+        "shake": 0.5669,
+        "twist": 0.2677,
+        "freefall": 0,
+        "tilt_x": 0.5748,
+        "tilt_y": 0.0866,
+        "tilt_z": 0.2126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4008,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0712,
+        "energy": 0.0861,
+        "tap": 0,
+        "shake": 0.5669,
+        "twist": 0.2677,
+        "freefall": 0,
+        "tilt_x": 0.5748,
+        "tilt_y": 0.0866,
+        "tilt_z": 0.2126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4066,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0815,
+        "energy": 0.1108,
+        "tap": 0,
+        "shake": 0.5669,
+        "twist": 0.2598,
+        "freefall": 0,
+        "tilt_x": 0.5827,
+        "tilt_y": 0.063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4117,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1593,
+        "energy": 0.2669,
+        "tap": 0,
+        "shake": 0.5748,
+        "twist": 0.2441,
+        "freefall": 0,
+        "tilt_x": 0.5039,
+        "tilt_y": 0.0157,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4175,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2864,
+        "energy": 0.5073,
+        "tap": 0,
+        "shake": 0.6142,
+        "twist": 0.2283,
+        "freefall": 0,
+        "tilt_x": 0.3386,
+        "tilt_y": 0.0709,
+        "tilt_z": 0.6457,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4225,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3551,
+        "energy": 0.6201,
+        "tap": 0,
+        "shake": 0.6929,
+        "twist": 0.2205,
+        "freefall": 0.0079,
+        "tilt_x": 0.3386,
+        "tilt_y": 0.2283,
+        "tilt_z": 0.8346,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4283,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2724,
+        "energy": 0.4204,
+        "tap": 0,
+        "shake": 0.7953,
+        "twist": 0.2047,
+        "freefall": 0.063,
+        "tilt_x": 0.3386,
+        "tilt_y": 0.2283,
+        "tilt_z": 0.8346,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4342,
+      "values": {
+        "roll_speed": 0.2696,
+        "roll_rate": 0.6311,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.9685,
+        "twist": 0.2205,
+        "freefall": 0.063,
+        "tilt_x": 0.4803,
+        "tilt_y": 0.5827,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4392,
+      "values": {
+        "roll_speed": 0.0151,
+        "roll_rate": 0.5026,
+        "energy": 0.826,
+        "tap": 0,
+        "shake": 0.9685,
+        "twist": 0.2205,
+        "freefall": 0.063,
+        "tilt_x": 0.4803,
+        "tilt_y": 0.5827,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4450,
+      "values": {
+        "roll_speed": 0.4438,
+        "roll_rate": 0.7191,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2126,
+        "freefall": 0.0472,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4500,
+      "values": {
+        "roll_speed": 0.1543,
+        "roll_rate": 0.5729,
+        "energy": 0.9021,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2047,
+        "freefall": 0.1024,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4550,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4565,
+        "energy": 0.6464,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0.1575,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4600,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3637,
+        "energy": 0.4631,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0.1575,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4650,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2896,
+        "energy": 0.3316,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0.2047,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4708,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2223,
+        "energy": 0.225,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.189,
+        "freefall": 0.2598,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4758,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.177,
+        "energy": 0.1611,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.189,
+        "freefall": 0.3071,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4808,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.141,
+        "energy": 0.1154,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1811,
+        "freefall": 0.3622,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 4858,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1124,
+        "energy": 0.0827,
+        "tap": 0.2805,
+        "shake": 1,
+        "twist": 0.1811,
+        "freefall": 0.3622,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.189,
+        "tilt_z": 0.5906,
+        "movement": 1,
+        "g:gmr4sga0m": 0.85
+      }
+    },
+    {
+      "t": 4908,
+      "values": {
+        "roll_speed": 0.1885,
+        "roll_rate": 0.5902,
+        "energy": 1,
+        "tap": 0.1303,
+        "shake": 1,
+        "twist": 0.1732,
+        "freefall": 0,
+        "tilt_x": 0.8583,
+        "tilt_y": 0.6535,
+        "tilt_z": 0.3386,
+        "movement": 1,
+        "g:gmr4sga0m": 0.3206
+      }
+    },
+    {
+      "t": 4958,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4702,
+        "energy": 0.8213,
+        "tap": 0.0605,
+        "shake": 1,
+        "twist": 0.1732,
+        "freefall": 0,
+        "tilt_x": 0.8583,
+        "tilt_y": 0.6535,
+        "tilt_z": 0.3386,
+        "movement": 1,
+        "g:gmr4sga0m": 0.1209
+      }
+    },
+    {
+      "t": 5008,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4151,
+        "energy": 0.6703,
+        "tap": 0.0281,
+        "shake": 1,
+        "twist": 0.1654,
+        "freefall": 0,
+        "tilt_x": 0.8819,
+        "tilt_y": 0.6535,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0456
+      }
+    },
+    {
+      "t": 5058,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4176,
+        "energy": 0.6593,
+        "tap": 0.013,
+        "shake": 1,
+        "twist": 0.1575,
+        "freefall": 0,
+        "tilt_x": 0.9606,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.3622,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0172
+      }
+    },
+    {
+      "t": 5117,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3532,
+        "energy": 0.5146,
+        "tap": 0.0053,
+        "shake": 1,
+        "twist": 0.1496,
+        "freefall": 0,
+        "tilt_x": 0.9528,
+        "tilt_y": 0.5748,
+        "tilt_z": 0.3228,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0055
+      }
+    },
+    {
+      "t": 5175,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.286,
+        "energy": 0.3797,
+        "tap": 0.0022,
+        "shake": 1,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.9606,
+        "tilt_y": 0.5512,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0018
+      }
+    },
+    {
+      "t": 5233,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2434,
+        "energy": 0.3067,
+        "tap": 0.0009,
+        "shake": 0.9843,
+        "twist": 0.1339,
+        "freefall": 0,
+        "tilt_x": 0.9606,
+        "tilt_y": 0.5906,
+        "tilt_z": 0.3386,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0006
+      }
+    },
+    {
+      "t": 5283,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2101,
+        "energy": 0.2543,
+        "tap": 0.0004,
+        "shake": 0.9449,
+        "twist": 0.126,
+        "freefall": 0,
+        "tilt_x": 0.9528,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.3228,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0002
+      }
+    },
+    {
+      "t": 5342,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.174,
+        "energy": 0.1998,
+        "tap": 0.0002,
+        "shake": 0.9055,
+        "twist": 0.1181,
+        "freefall": 0,
+        "tilt_x": 0.9449,
+        "tilt_y": 0.622,
+        "tilt_z": 0.315,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0001
+      }
+    },
+    {
+      "t": 5392,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1823,
+        "energy": 0.238,
+        "tap": 0.0001,
+        "shake": 0.874,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.9449,
+        "tilt_y": 0.5433,
+        "tilt_z": 0.2913,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5442,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1453,
+        "energy": 0.1705,
+        "tap": 0,
+        "shake": 0.874,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.9449,
+        "tilt_y": 0.5433,
+        "tilt_z": 0.2913,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5500,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1651,
+        "energy": 0.2204,
+        "tap": 0,
+        "shake": 0.8425,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.9134,
+        "tilt_y": 0.4803,
+        "tilt_z": 0.2283,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5550,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.201,
+        "energy": 0.296,
+        "tap": 0,
+        "shake": 0.8268,
+        "twist": 0.1024,
+        "freefall": 0,
+        "tilt_x": 0.8504,
+        "tilt_y": 0.4252,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5600,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2711,
+        "energy": 0.4406,
+        "tap": 0,
+        "shake": 0.8268,
+        "twist": 0.0945,
+        "freefall": 0,
+        "tilt_x": 0.6772,
+        "tilt_y": 0.4016,
+        "tilt_z": 0.0551,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5650,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3717,
+        "energy": 0.6419,
+        "tap": 0,
+        "shake": 0.8583,
+        "twist": 0.0945,
+        "freefall": 0,
+        "tilt_x": 0.3622,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.0709,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5700,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4482,
+        "energy": 0.7844,
+        "tap": 0,
+        "shake": 0.9291,
+        "twist": 0.0866,
+        "freefall": 0.0079,
+        "tilt_x": 0.2441,
+        "tilt_y": 0.2283,
+        "tilt_z": 0.2126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5750,
+      "values": {
+        "roll_speed": 0.2056,
+        "roll_rate": 0.5988,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.0866,
+        "freefall": 0.0315,
+        "tilt_x": 0.2756,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5808,
+      "values": {
+        "roll_speed": 0.795,
+        "roll_rate": 0.8965,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.6378,
+        "tilt_y": 0.7795,
+        "tilt_z": 0.4803,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5858,
+      "values": {
+        "roll_speed": 0.4335,
+        "roll_rate": 0.7139,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.6378,
+        "tilt_y": 0.7795,
+        "tilt_z": 0.4803,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5916,
+      "values": {
+        "roll_speed": 0.7108,
+        "roll_rate": 0.854,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 5966,
+      "values": {
+        "roll_speed": 0.3671,
+        "roll_rate": 0.6804,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1575,
+        "freefall": 0.0472,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6017,
+      "values": {
+        "roll_speed": 0.0927,
+        "roll_rate": 0.5418,
+        "energy": 0.7323,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1811,
+        "freefall": 0.0945,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6075,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4155,
+        "energy": 0.4961,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0.1496,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6125,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.331,
+        "energy": 0.3555,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2126,
+        "freefall": 0.1969,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6183,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2541,
+        "energy": 0.2412,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2362,
+        "freefall": 0.252,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6233,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2023,
+        "energy": 0.1727,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.252,
+        "freefall": 0.3071,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6283,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1612,
+        "energy": 0.1237,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.252,
+        "freefall": 0.3071,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6342,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1236,
+        "energy": 0.0838,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2677,
+        "freefall": 0.3543,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6400,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0948,
+        "energy": 0.0568,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2913,
+        "freefall": 0.4094,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6458,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0728,
+        "energy": 0.0386,
+        "tap": 0.1865,
+        "shake": 1,
+        "twist": 0.2913,
+        "freefall": 0.4094,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6516,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0561,
+        "energy": 0.0263,
+        "tap": 0.0762,
+        "shake": 1,
+        "twist": 0.2913,
+        "freefall": 0.4094,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.3386,
+        "tilt_z": 0.1496,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6566,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3811,
+        "energy": 0.7007,
+        "tap": 0.0354,
+        "shake": 1,
+        "twist": 0.2677,
+        "freefall": 0,
+        "tilt_x": 0.6457,
+        "tilt_y": 0.3622,
+        "tilt_z": 0.937,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6617,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3893,
+        "energy": 0.6782,
+        "tap": 0.0164,
+        "shake": 1,
+        "twist": 0.252,
+        "freefall": 0,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.5276,
+        "tilt_z": 0.9449,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6667,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3413,
+        "energy": 0.5512,
+        "tap": 0.0076,
+        "shake": 1,
+        "twist": 0.2441,
+        "freefall": 0,
+        "tilt_x": 0.6929,
+        "tilt_y": 0.4646,
+        "tilt_z": 0.9528,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6717,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3043,
+        "energy": 0.464,
+        "tap": 0.0035,
+        "shake": 1,
+        "twist": 0.2283,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.4252,
+        "tilt_z": 0.9606,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6775,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2568,
+        "energy": 0.3653,
+        "tap": 0.0014,
+        "shake": 1,
+        "twist": 0.2205,
+        "freefall": 0,
+        "tilt_x": 0.6535,
+        "tilt_y": 0.3858,
+        "tilt_z": 0.9528,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6825,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2046,
+        "energy": 0.2617,
+        "tap": 0.0007,
+        "shake": 1,
+        "twist": 0.2205,
+        "freefall": 0,
+        "tilt_x": 0.6535,
+        "tilt_y": 0.3858,
+        "tilt_z": 0.9528,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6883,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1736,
+        "energy": 0.2098,
+        "tap": 0.0003,
+        "shake": 0.9528,
+        "twist": 0.2047,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.4173,
+        "tilt_z": 0.9606,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6941,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1356,
+        "energy": 0.147,
+        "tap": 0.0001,
+        "shake": 0.9055,
+        "twist": 0.1969,
+        "freefall": 0,
+        "tilt_x": 0.6614,
+        "tilt_y": 0.4252,
+        "tilt_z": 0.9606,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 6992,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1218,
+        "energy": 0.1328,
+        "tap": 0.0001,
+        "shake": 0.8583,
+        "twist": 0.189,
+        "freefall": 0,
+        "tilt_x": 0.6535,
+        "tilt_y": 0.4488,
+        "tilt_z": 0.9685,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7050,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0992,
+        "energy": 0.1017,
+        "tap": 0,
+        "shake": 0.8189,
+        "twist": 0.1732,
+        "freefall": 0,
+        "tilt_x": 0.6378,
+        "tilt_y": 0.4488,
+        "tilt_z": 0.9685,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7100,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.097,
+        "energy": 0.1099,
+        "tap": 0,
+        "shake": 0.7795,
+        "twist": 0.1654,
+        "freefall": 0,
+        "tilt_x": 0.6299,
+        "tilt_y": 0.4803,
+        "tilt_z": 0.9764,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7158,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0924,
+        "energy": 0.1115,
+        "tap": 0,
+        "shake": 0.748,
+        "twist": 0.1575,
+        "freefall": 0,
+        "tilt_x": 0.6063,
+        "tilt_y": 0.4961,
+        "tilt_z": 0.9843,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7208,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1017,
+        "energy": 0.1387,
+        "tap": 0,
+        "shake": 0.7323,
+        "twist": 0.1496,
+        "freefall": 0,
+        "tilt_x": 0.5906,
+        "tilt_y": 0.5512,
+        "tilt_z": 0.9843,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7258,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2104,
+        "energy": 0.3755,
+        "tap": 0,
+        "shake": 0.7087,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7323,
+        "tilt_z": 0.9213,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7317,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.362,
+        "energy": 0.6822,
+        "tap": 0,
+        "shake": 0.685,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.4409,
+        "tilt_y": 0.9213,
+        "tilt_z": 0.7008,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7367,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2883,
+        "energy": 0.4885,
+        "tap": 0,
+        "shake": 0.685,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.4409,
+        "tilt_y": 0.9213,
+        "tilt_z": 0.7008,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7425,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3066,
+        "energy": 0.498,
+        "tap": 0,
+        "shake": 0.6614,
+        "twist": 0.1654,
+        "freefall": 0.0079,
+        "tilt_x": 0.4567,
+        "tilt_y": 0.9685,
+        "tilt_z": 0.5118,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7475,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2443,
+        "energy": 0.3568,
+        "tap": 0,
+        "shake": 0.6378,
+        "twist": 0.189,
+        "freefall": 0.063,
+        "tilt_x": 0.4567,
+        "tilt_y": 0.9685,
+        "tilt_z": 0.5118,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7533,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4649,
+        "energy": 0.7929,
+        "tap": 0,
+        "shake": 0.6063,
+        "twist": 0.2598,
+        "freefall": 0.0709,
+        "tilt_x": 0.4724,
+        "tilt_y": 0.2126,
+        "tilt_z": 0.4961,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7591,
+      "values": {
+        "roll_speed": 0.2663,
+        "roll_rate": 0.6295,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.5748,
+        "twist": 0.3307,
+        "freefall": 0,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7641,
+      "values": {
+        "roll_speed": 0.0129,
+        "roll_rate": 0.5015,
+        "energy": 0.7738,
+        "tap": 0,
+        "shake": 0.5433,
+        "twist": 0.3858,
+        "freefall": 0.0472,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7692,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3992,
+        "energy": 0.5537,
+        "tap": 0,
+        "shake": 0.5197,
+        "twist": 0.4252,
+        "freefall": 0.0945,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7750,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3067,
+        "energy": 0.3761,
+        "tap": 0,
+        "shake": 0.4882,
+        "twist": 0.4724,
+        "freefall": 0.1496,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7800,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2439,
+        "energy": 0.2688,
+        "tap": 0,
+        "shake": 0.4646,
+        "twist": 0.5118,
+        "freefall": 0.1969,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7858,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1872,
+        "energy": 0.1824,
+        "tap": 0,
+        "shake": 0.4409,
+        "twist": 0.5512,
+        "freefall": 0.252,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7908,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1491,
+        "energy": 0.1307,
+        "tap": 0,
+        "shake": 0.4409,
+        "twist": 0.5512,
+        "freefall": 0.252,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 7967,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1144,
+        "energy": 0.0885,
+        "tap": 0,
+        "shake": 0.4173,
+        "twist": 0.5906,
+        "freefall": 0.3071,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8025,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0879,
+        "energy": 0.0602,
+        "tap": 0,
+        "shake": 0.4016,
+        "twist": 0.6299,
+        "freefall": 0.3543,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8075,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0699,
+        "energy": 0.043,
+        "tap": 0,
+        "shake": 0.378,
+        "twist": 0.6614,
+        "freefall": 0.4094,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8125,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0557,
+        "energy": 0.0308,
+        "tap": 0.1995,
+        "shake": 0.378,
+        "twist": 0.6614,
+        "freefall": 0.4094,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.7638,
+        "tilt_z": 0.6693,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8175,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3082,
+        "energy": 0.5652,
+        "tap": 0.0926,
+        "shake": 0.3465,
+        "twist": 0.6457,
+        "freefall": 0,
+        "tilt_x": 0.7244,
+        "tilt_y": 0.7953,
+        "tilt_z": 0.2126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8233,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3237,
+        "energy": 0.566,
+        "tap": 0.0379,
+        "shake": 0.3386,
+        "twist": 0.6063,
+        "freefall": 0,
+        "tilt_x": 0.7087,
+        "tilt_y": 0.7008,
+        "tilt_z": 0.1024,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8283,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3258,
+        "energy": 0.5504,
+        "tap": 0.0176,
+        "shake": 0.3228,
+        "twist": 0.5748,
+        "freefall": 0,
+        "tilt_x": 0.8031,
+        "tilt_y": 0.685,
+        "tilt_z": 0.1575,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8333,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2999,
+        "energy": 0.4819,
+        "tap": 0.0082,
+        "shake": 0.315,
+        "twist": 0.5512,
+        "freefall": 0,
+        "tilt_x": 0.7559,
+        "tilt_y": 0.7087,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8383,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2389,
+        "energy": 0.3453,
+        "tap": 0.0038,
+        "shake": 0.315,
+        "twist": 0.5512,
+        "freefall": 0,
+        "tilt_x": 0.7559,
+        "tilt_y": 0.7087,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8433,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2043,
+        "energy": 0.2751,
+        "tap": 0.0018,
+        "shake": 0.2992,
+        "twist": 0.5197,
+        "freefall": 0,
+        "tilt_x": 0.7638,
+        "tilt_y": 0.7323,
+        "tilt_z": 0.1417,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8483,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.18,
+        "energy": 0.232,
+        "tap": 0.0008,
+        "shake": 0.2913,
+        "twist": 0.4961,
+        "freefall": 0,
+        "tilt_x": 0.7559,
+        "tilt_y": 0.7087,
+        "tilt_z": 0.126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8542,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1531,
+        "energy": 0.1881,
+        "tap": 0.0003,
+        "shake": 0.2756,
+        "twist": 0.4724,
+        "freefall": 0,
+        "tilt_x": 0.7795,
+        "tilt_y": 0.7008,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8600,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1355,
+        "energy": 0.1647,
+        "tap": 0.0001,
+        "shake": 0.2677,
+        "twist": 0.4488,
+        "freefall": 0,
+        "tilt_x": 0.7874,
+        "tilt_y": 0.6693,
+        "tilt_z": 0.126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8650,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1204,
+        "energy": 0.1441,
+        "tap": 0.0001,
+        "shake": 0.2598,
+        "twist": 0.4252,
+        "freefall": 0,
+        "tilt_x": 0.8031,
+        "tilt_y": 0.6693,
+        "tilt_z": 0.1417,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8700,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0959,
+        "energy": 0.1033,
+        "tap": 0,
+        "shake": 0.252,
+        "twist": 0.4016,
+        "freefall": 0,
+        "tilt_x": 0.8031,
+        "tilt_y": 0.6693,
+        "tilt_z": 0.1417,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8750,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1267,
+        "energy": 0.1831,
+        "tap": 0,
+        "shake": 0.2598,
+        "twist": 0.378,
+        "freefall": 0,
+        "tilt_x": 0.8425,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.1575,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8800,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.101,
+        "energy": 0.1312,
+        "tap": 0,
+        "shake": 0.2598,
+        "twist": 0.378,
+        "freefall": 0,
+        "tilt_x": 0.8425,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.1575,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8857,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1643,
+        "energy": 0.2617,
+        "tap": 0,
+        "shake": 0.2835,
+        "twist": 0.3622,
+        "freefall": 0,
+        "tilt_x": 0.8898,
+        "tilt_y": 0.4567,
+        "tilt_z": 0.2047,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8908,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3033,
+        "energy": 0.5359,
+        "tap": 0,
+        "shake": 0.3386,
+        "twist": 0.3465,
+        "freefall": 0,
+        "tilt_x": 0.7874,
+        "tilt_y": 0.1811,
+        "tilt_z": 0.2992,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 8958,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4244,
+        "energy": 0.7602,
+        "tap": 0,
+        "shake": 0.4173,
+        "twist": 0.3228,
+        "freefall": 0,
+        "tilt_x": 0.6772,
+        "tilt_y": 0.0787,
+        "tilt_z": 0.5669,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9017,
+      "values": {
+        "roll_speed": 0.0795,
+        "roll_rate": 0.5351,
+        "energy": 0.9464,
+        "tap": 0,
+        "shake": 0.4961,
+        "twist": 0.315,
+        "freefall": 0.0315,
+        "tilt_x": 0.5512,
+        "tilt_y": 0.315,
+        "tilt_z": 0.7559,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9074,
+      "values": {
+        "roll_speed": 0.5738,
+        "roll_rate": 0.7848,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.6063,
+        "twist": 0.3543,
+        "freefall": 0,
+        "tilt_x": 0.4252,
+        "tilt_y": 0.7165,
+        "tilt_z": 0.3071,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9125,
+      "values": {
+        "roll_speed": 0.8366,
+        "roll_rate": 0.9175,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.622,
+        "twist": 0.4016,
+        "freefall": 0,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9183,
+      "values": {
+        "roll_speed": 0.4124,
+        "roll_rate": 0.7033,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.6142,
+        "twist": 0.4409,
+        "freefall": 0.0551,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9242,
+      "values": {
+        "roll_speed": 0.0887,
+        "roll_rate": 0.5398,
+        "energy": 0.7511,
+        "tap": 0,
+        "shake": 0.6142,
+        "twist": 0.4409,
+        "freefall": 0.0551,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9292,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.43,
+        "energy": 0.5382,
+        "tap": 0,
+        "shake": 0.5984,
+        "twist": 0.4961,
+        "freefall": 0.1339,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9342,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3426,
+        "energy": 0.3856,
+        "tap": 0,
+        "shake": 0.5827,
+        "twist": 0.5354,
+        "freefall": 0.1811,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9399,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2635,
+        "energy": 0.2623,
+        "tap": 0,
+        "shake": 0.5669,
+        "twist": 0.5669,
+        "freefall": 0.2362,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9450,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2093,
+        "energy": 0.1872,
+        "tap": 0,
+        "shake": 0.5433,
+        "twist": 0.6063,
+        "freefall": 0.2913,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9507,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1612,
+        "energy": 0.1276,
+        "tap": 0,
+        "shake": 0.5197,
+        "twist": 0.6378,
+        "freefall": 0.3386,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 9558,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1279,
+        "energy": 0.0909,
+        "tap": 0,
+        "shake": 0.5197,
+        "twist": 0.6378,
+        "freefall": 0.3386,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 1
+      }
+    },
+    {
+      "t": 9608,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1019,
+        "energy": 0.0652,
+        "tap": 0,
+        "shake": 0.4961,
+        "twist": 0.6772,
+        "freefall": 0.3937,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0.3771
+      }
+    },
+    {
+      "t": 9658,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0812,
+        "energy": 0.0467,
+        "tap": 0.1496,
+        "shake": 0.4961,
+        "twist": 0.6772,
+        "freefall": 0.3937,
+        "tilt_x": 0.7008,
+        "tilt_y": 0.3071,
+        "tilt_z": 0.2756,
+        "movement": 1,
+        "g:gmr4sga0m": 0.1422
+      }
+    },
+    {
+      "t": 9717,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3829,
+        "energy": 0.6802,
+        "tap": 0.0611,
+        "shake": 0.4646,
+        "twist": 0.6614,
+        "freefall": 0,
+        "tilt_x": 0.5197,
+        "tilt_y": 0.8976,
+        "tilt_z": 0.378,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0456
+      }
+    },
+    {
+      "t": 9767,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3739,
+        "energy": 0.6291,
+        "tap": 0.0284,
+        "shake": 0.4488,
+        "twist": 0.6299,
+        "freefall": 0,
+        "tilt_x": 0.4488,
+        "tilt_y": 0.937,
+        "tilt_z": 0.3071,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0172
+      }
+    },
+    {
+      "t": 9825,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3558,
+        "energy": 0.5684,
+        "tap": 0.0116,
+        "shake": 0.4331,
+        "twist": 0.5984,
+        "freefall": 0,
+        "tilt_x": 0.4724,
+        "tilt_y": 0.8898,
+        "tilt_z": 0.1969,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0055
+      }
+    },
+    {
+      "t": 9875,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3223,
+        "energy": 0.4901,
+        "tap": 0.0054,
+        "shake": 0.4173,
+        "twist": 0.5669,
+        "freefall": 0,
+        "tilt_x": 0.4331,
+        "tilt_y": 0.9134,
+        "tilt_z": 0.2283,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0021
+      }
+    },
+    {
+      "t": 9933,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.257,
+        "energy": 0.353,
+        "tap": 0.0022,
+        "shake": 0.3937,
+        "twist": 0.5354,
+        "freefall": 0,
+        "tilt_x": 0.4173,
+        "tilt_y": 0.9134,
+        "tilt_z": 0.2362,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0007
+      }
+    },
+    {
+      "t": 9983,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2316,
+        "energy": 0.3113,
+        "tap": 0.001,
+        "shake": 0.378,
+        "twist": 0.5118,
+        "freefall": 0,
+        "tilt_x": 0.3858,
+        "tilt_y": 0.8976,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0003
+      }
+    },
+    {
+      "t": 10033,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1845,
+        "energy": 0.223,
+        "tap": 0.0005,
+        "shake": 0.378,
+        "twist": 0.5118,
+        "freefall": 0,
+        "tilt_x": 0.3858,
+        "tilt_y": 0.8976,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0001
+      }
+    },
+    {
+      "t": 10083,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1637,
+        "energy": 0.193,
+        "tap": 0.0002,
+        "shake": 0.3622,
+        "twist": 0.4803,
+        "freefall": 0,
+        "tilt_x": 0.4173,
+        "tilt_y": 0.8976,
+        "tilt_z": 0.2047,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10133,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1424,
+        "energy": 0.163,
+        "tap": 0.0001,
+        "shake": 0.3465,
+        "twist": 0.4567,
+        "freefall": 0,
+        "tilt_x": 0.4016,
+        "tilt_y": 0.8898,
+        "tilt_z": 0.1969,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10192,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1182,
+        "energy": 0.1289,
+        "tap": 0,
+        "shake": 0.3307,
+        "twist": 0.4331,
+        "freefall": 0,
+        "tilt_x": 0.4094,
+        "tilt_y": 0.8819,
+        "tilt_z": 0.189,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10242,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1222,
+        "energy": 0.1511,
+        "tap": 0,
+        "shake": 0.315,
+        "twist": 0.4173,
+        "freefall": 0,
+        "tilt_x": 0.378,
+        "tilt_y": 0.8583,
+        "tilt_z": 0.1732,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10292,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0973,
+        "energy": 0.1082,
+        "tap": 0,
+        "shake": 0.315,
+        "twist": 0.4173,
+        "freefall": 0,
+        "tilt_x": 0.378,
+        "tilt_y": 0.8583,
+        "tilt_z": 0.1732,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10350,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.083,
+        "energy": 0.09,
+        "tap": 0,
+        "shake": 0.2992,
+        "twist": 0.3858,
+        "freefall": 0,
+        "tilt_x": 0.3701,
+        "tilt_y": 0.8504,
+        "tilt_z": 0.1654,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10400,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0871,
+        "energy": 0.1076,
+        "tap": 0,
+        "shake": 0.2992,
+        "twist": 0.3622,
+        "freefall": 0,
+        "tilt_x": 0.3465,
+        "tilt_y": 0.8268,
+        "tilt_z": 0.1575,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10450,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.113,
+        "energy": 0.1683,
+        "tap": 0,
+        "shake": 0.2992,
+        "twist": 0.3465,
+        "freefall": 0,
+        "tilt_x": 0.3307,
+        "tilt_y": 0.7717,
+        "tilt_z": 0.1181,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10500,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1903,
+        "energy": 0.3344,
+        "tap": 0,
+        "shake": 0.315,
+        "twist": 0.3307,
+        "freefall": 0,
+        "tilt_x": 0.2835,
+        "tilt_y": 0.622,
+        "tilt_z": 0.0709,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10558,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2496,
+        "energy": 0.4478,
+        "tap": 0,
+        "shake": 0.3465,
+        "twist": 0.3071,
+        "freefall": 0,
+        "tilt_x": 0.2992,
+        "tilt_y": 0.4016,
+        "tilt_z": 0.0551,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10608,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3965,
+        "energy": 0.7494,
+        "tap": 0,
+        "shake": 0.4173,
+        "twist": 0.2913,
+        "freefall": 0,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.1969,
+        "tilt_z": 0.126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10666,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3053,
+        "energy": 0.5108,
+        "tap": 0,
+        "shake": 0.4173,
+        "twist": 0.2913,
+        "freefall": 0,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.1969,
+        "tilt_z": 0.126,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10716,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2985,
+        "energy": 0.4758,
+        "tap": 0,
+        "shake": 0.5276,
+        "twist": 0.2756,
+        "freefall": 0.0315,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.1654,
+        "tilt_z": 0.1969,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10766,
+      "values": {
+        "roll_speed": 0.1803,
+        "roll_rate": 0.5861,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.7165,
+        "twist": 0.2677,
+        "freefall": 0,
+        "tilt_x": 0.5433,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.7953,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10824,
+      "values": {
+        "roll_speed": 0.5034,
+        "roll_rate": 0.7492,
+        "energy": 1,
+        "tap": 0,
+        "shake": 0.9291,
+        "twist": 0.2677,
+        "freefall": 0,
+        "tilt_x": 0.3858,
+        "tilt_y": 0.5984,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10875,
+      "values": {
+        "roll_speed": 0.3687,
+        "roll_rate": 0.6812,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2756,
+        "freefall": 0.0236,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10925,
+      "values": {
+        "roll_speed": 0.0944,
+        "roll_rate": 0.5427,
+        "energy": 0.7991,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2835,
+        "freefall": 0.0787,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 10975,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4324,
+        "energy": 0.5725,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2835,
+        "freefall": 0.126,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11025,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3445,
+        "energy": 0.4102,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2835,
+        "freefall": 0.126,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11083,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2643,
+        "energy": 0.2781,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2913,
+        "freefall": 0.1811,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11133,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2105,
+        "energy": 0.1993,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2913,
+        "freefall": 0.2362,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11192,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1615,
+        "energy": 0.135,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2992,
+        "freefall": 0.2835,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11249,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1242,
+        "energy": 0.0919,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2992,
+        "freefall": 0.3386,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 1
+      }
+    },
+    {
+      "t": 11300,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0987,
+        "energy": 0.0656,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.3071,
+        "freefall": 0.3937,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0.3771
+      }
+    },
+    {
+      "t": 11350,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0786,
+        "energy": 0.047,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.3071,
+        "freefall": 0.3937,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0.1422
+      }
+    },
+    {
+      "t": 11400,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0626,
+        "energy": 0.0337,
+        "tap": 0.2327,
+        "shake": 1,
+        "twist": 0.3071,
+        "freefall": 0.3937,
+        "tilt_x": 0.4882,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.1339,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0536
+      }
+    },
+    {
+      "t": 11458,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4466,
+        "energy": 0.8292,
+        "tap": 0.0951,
+        "shake": 1,
+        "twist": 0.2756,
+        "freefall": 0,
+        "tilt_x": 0.3307,
+        "tilt_y": 0.8898,
+        "tilt_z": 0.7323,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0172
+      }
+    },
+    {
+      "t": 11508,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3888,
+        "energy": 0.662,
+        "tap": 0.0442,
+        "shake": 1,
+        "twist": 0.2598,
+        "freefall": 0,
+        "tilt_x": 0.3386,
+        "tilt_y": 0.8661,
+        "tilt_z": 0.7874,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0065
+      }
+    },
+    {
+      "t": 11558,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3253,
+        "energy": 0.507,
+        "tap": 0.0205,
+        "shake": 1,
+        "twist": 0.252,
+        "freefall": 0,
+        "tilt_x": 0.3622,
+        "tilt_y": 0.874,
+        "tilt_z": 0.7953,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0024
+      }
+    },
+    {
+      "t": 11608,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2928,
+        "energy": 0.4362,
+        "tap": 0.0095,
+        "shake": 1,
+        "twist": 0.2362,
+        "freefall": 0,
+        "tilt_x": 0.315,
+        "tilt_y": 0.8504,
+        "tilt_z": 0.8031,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0009
+      }
+    },
+    {
+      "t": 11667,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2347,
+        "energy": 0.3176,
+        "tap": 0.0039,
+        "shake": 1,
+        "twist": 0.2205,
+        "freefall": 0,
+        "tilt_x": 0.2992,
+        "tilt_y": 0.8425,
+        "tilt_z": 0.8031,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0003
+      }
+    },
+    {
+      "t": 11725,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2035,
+        "energy": 0.2661,
+        "tap": 0.0016,
+        "shake": 1,
+        "twist": 0.2126,
+        "freefall": 0,
+        "tilt_x": 0.3228,
+        "tilt_y": 0.8583,
+        "tilt_z": 0.7874,
+        "movement": 1,
+        "g:gmr4sga0m": 0.0001
+      }
+    },
+    {
+      "t": 11775,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.162,
+        "energy": 0.1906,
+        "tap": 0.0007,
+        "shake": 1,
+        "twist": 0.2126,
+        "freefall": 0,
+        "tilt_x": 0.3228,
+        "tilt_y": 0.8583,
+        "tilt_z": 0.7874,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11833,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1377,
+        "energy": 0.1554,
+        "tap": 0.0003,
+        "shake": 1,
+        "twist": 0.2047,
+        "freefall": 0,
+        "tilt_x": 0.3386,
+        "tilt_y": 0.874,
+        "tilt_z": 0.7795,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11883,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1236,
+        "energy": 0.1389,
+        "tap": 0.0001,
+        "shake": 1,
+        "twist": 0.189,
+        "freefall": 0,
+        "tilt_x": 0.3307,
+        "tilt_y": 0.8898,
+        "tilt_z": 0.7638,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11933,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1135,
+        "energy": 0.1304,
+        "tap": 0.0001,
+        "shake": 0.9685,
+        "twist": 0.1811,
+        "freefall": 0,
+        "tilt_x": 0.3071,
+        "tilt_y": 0.874,
+        "tilt_z": 0.7638,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 11983,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0998,
+        "energy": 0.113,
+        "tap": 0,
+        "shake": 0.9213,
+        "twist": 0.1732,
+        "freefall": 0,
+        "tilt_x": 0.315,
+        "tilt_y": 0.8819,
+        "tilt_z": 0.7559,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12041,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1079,
+        "energy": 0.1423,
+        "tap": 0,
+        "shake": 0.8898,
+        "twist": 0.1654,
+        "freefall": 0,
+        "tilt_x": 0.2835,
+        "tilt_y": 0.8504,
+        "tilt_z": 0.7717,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12092,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1277,
+        "energy": 0.1911,
+        "tap": 0,
+        "shake": 0.8583,
+        "twist": 0.1575,
+        "freefall": 0,
+        "tilt_x": 0.2205,
+        "tilt_y": 0.811,
+        "tilt_z": 0.7717,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12142,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1958,
+        "energy": 0.3411,
+        "tap": 0,
+        "shake": 0.8504,
+        "twist": 0.1496,
+        "freefall": 0,
+        "tilt_x": 0.126,
+        "tilt_y": 0.7165,
+        "tilt_z": 0.7402,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12199,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1506,
+        "energy": 0.2321,
+        "tap": 0,
+        "shake": 0.8504,
+        "twist": 0.1496,
+        "freefall": 0,
+        "tilt_x": 0.126,
+        "tilt_y": 0.7165,
+        "tilt_z": 0.7402,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12250,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.278,
+        "energy": 0.4801,
+        "tap": 0,
+        "shake": 0.8583,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.0236,
+        "tilt_y": 0.5118,
+        "tilt_z": 0.5984,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12307,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3844,
+        "energy": 0.6665,
+        "tap": 0,
+        "shake": 0.8976,
+        "twist": 0.1339,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.3307,
+        "tilt_z": 0.3543,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12358,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3426,
+        "energy": 0.5506,
+        "tap": 0,
+        "shake": 0.9921,
+        "twist": 0.126,
+        "freefall": 0.0394,
+        "tilt_x": 0.1339,
+        "tilt_y": 0.315,
+        "tilt_z": 0.3228,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12408,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2728,
+        "energy": 0.3943,
+        "tap": 0,
+        "shake": 0.9921,
+        "twist": 0.126,
+        "freefall": 0.0394,
+        "tilt_x": 0.1339,
+        "tilt_y": 0.315,
+        "tilt_z": 0.3228,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12467,
+      "values": {
+        "roll_speed": 0.2669,
+        "roll_rate": 0.6298,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1496,
+        "freefall": 0,
+        "tilt_x": 0.6299,
+        "tilt_y": 0.622,
+        "tilt_z": 0.7559,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12517,
+      "values": {
+        "roll_speed": 0.6622,
+        "roll_rate": 0.8294,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1732,
+        "freefall": 0,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12567,
+      "values": {
+        "roll_speed": 0.3283,
+        "roll_rate": 0.6608,
+        "energy": 1,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1811,
+        "freefall": 0.0394,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12617,
+      "values": {
+        "roll_speed": 0.0623,
+        "roll_rate": 0.5265,
+        "energy": 0.7346,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0.0945,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12667,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.4194,
+        "energy": 0.5264,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2047,
+        "freefall": 0.1417,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12725,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3218,
+        "energy": 0.3569,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2126,
+        "freefall": 0.1969,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12775,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2564,
+        "energy": 0.2557,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2283,
+        "freefall": 0.252,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12825,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2043,
+        "energy": 0.1832,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2283,
+        "freefall": 0.252,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12875,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1627,
+        "energy": 0.1313,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.2362,
+        "freefall": 0.2992,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12933,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1248,
+        "energy": 0.089,
+        "tap": 0,
+        "shake": 1,
+        "twist": 0.252,
+        "freefall": 0.3543,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 12983,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0995,
+        "energy": 0.0638,
+        "tap": 0.1579,
+        "shake": 1,
+        "twist": 0.252,
+        "freefall": 0.3543,
+        "tilt_x": 0.1575,
+        "tilt_y": 0.5197,
+        "tilt_z": 0.4016,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13033,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1945,
+        "energy": 0.2873,
+        "tap": 0.0733,
+        "shake": 1,
+        "twist": 0.2441,
+        "freefall": 0,
+        "tilt_x": 0.126,
+        "tilt_y": 0.3701,
+        "tilt_z": 0.2913,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13083,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2487,
+        "energy": 0.4057,
+        "tap": 0.0341,
+        "shake": 1,
+        "twist": 0.2362,
+        "freefall": 0,
+        "tilt_x": 0.0315,
+        "tilt_y": 0.3701,
+        "tilt_z": 0.4252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13142,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2297,
+        "energy": 0.358,
+        "tap": 0.0139,
+        "shake": 1,
+        "twist": 0.2205,
+        "freefall": 0,
+        "tilt_x": 0.0315,
+        "tilt_y": 0.3937,
+        "tilt_z": 0.3543,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13200,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2926,
+        "energy": 0.4908,
+        "tap": 0.0057,
+        "shake": 1,
+        "twist": 0.2126,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.5276,
+        "tilt_z": 0.2441,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13250,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.3204,
+        "energy": 0.5413,
+        "tap": 0.0026,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0,
+        "tilt_x": 0.1339,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.1811,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13300,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.2553,
+        "energy": 0.3879,
+        "tap": 0.0012,
+        "shake": 1,
+        "twist": 0.1969,
+        "freefall": 0,
+        "tilt_x": 0.1339,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.1811,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13350,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.212,
+        "energy": 0.2954,
+        "tap": 0.0006,
+        "shake": 1,
+        "twist": 0.189,
+        "freefall": 0,
+        "tilt_x": 0.1339,
+        "tilt_y": 0.622,
+        "tilt_z": 0.1732,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13400,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1929,
+        "energy": 0.2611,
+        "tap": 0.0003,
+        "shake": 1,
+        "twist": 0.1811,
+        "freefall": 0,
+        "tilt_x": 0.1102,
+        "tilt_y": 0.5984,
+        "tilt_z": 0.189,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13457,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1486,
+        "energy": 0.1779,
+        "tap": 0.0001,
+        "shake": 1,
+        "twist": 0.1811,
+        "freefall": 0,
+        "tilt_x": 0.1102,
+        "tilt_y": 0.5984,
+        "tilt_z": 0.189,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13508,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1512,
+        "energy": 0.1928,
+        "tap": 0.0001,
+        "shake": 0.9291,
+        "twist": 0.1654,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.5827,
+        "tilt_z": 0.2362,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13558,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.132,
+        "energy": 0.1615,
+        "tap": 0,
+        "shake": 0.8819,
+        "twist": 0.1575,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.2362,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13608,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1052,
+        "energy": 0.1157,
+        "tap": 0,
+        "shake": 0.8425,
+        "twist": 0.1496,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.5591,
+        "tilt_z": 0.2362,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13658,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1087,
+        "energy": 0.1351,
+        "tap": 0,
+        "shake": 0.8031,
+        "twist": 0.1417,
+        "freefall": 0,
+        "tilt_x": 0.0866,
+        "tilt_y": 0.5906,
+        "tilt_z": 0.2205,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13708,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.1068,
+        "energy": 0.1406,
+        "tap": 0,
+        "shake": 0.7638,
+        "twist": 0.1339,
+        "freefall": 0,
+        "tilt_x": 0.0945,
+        "tilt_y": 0.622,
+        "tilt_z": 0.2283,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13758,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0851,
+        "energy": 0.1007,
+        "tap": 0,
+        "shake": 0.7638,
+        "twist": 0.1339,
+        "freefall": 0,
+        "tilt_x": 0.0945,
+        "tilt_y": 0.622,
+        "tilt_z": 0.2283,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13808,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0761,
+        "energy": 0.0888,
+        "tap": 0,
+        "shake": 0.7244,
+        "twist": 0.126,
+        "freefall": 0,
+        "tilt_x": 0.0945,
+        "tilt_y": 0.6378,
+        "tilt_z": 0.2362,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13858,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.078,
+        "energy": 0.0986,
+        "tap": 0,
+        "shake": 0.685,
+        "twist": 0.1181,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.622,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13908,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0681,
+        "energy": 0.083,
+        "tap": 0,
+        "shake": 0.6535,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6299,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 13967,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0522,
+        "energy": 0.0563,
+        "tap": 0,
+        "shake": 0.622,
+        "twist": 0.1102,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6299,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14017,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0416,
+        "energy": 0.0403,
+        "tap": 0,
+        "shake": 0.5906,
+        "twist": 0.1024,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6299,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14067,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0432,
+        "energy": 0.0508,
+        "tap": 0,
+        "shake": 0.5591,
+        "twist": 0.0945,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14117,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0344,
+        "energy": 0.0364,
+        "tap": 0,
+        "shake": 0.5591,
+        "twist": 0.0945,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14167,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.033,
+        "energy": 0.0371,
+        "tap": 0,
+        "shake": 0.5276,
+        "twist": 0.0945,
+        "freefall": 0,
+        "tilt_x": 0.063,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2677,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14225,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0309,
+        "energy": 0.0363,
+        "tap": 0,
+        "shake": 0.5039,
+        "twist": 0.0866,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2677,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14275,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0275,
+        "energy": 0.0318,
+        "tap": 0,
+        "shake": 0.4803,
+        "twist": 0.0866,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2677,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14325,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0249,
+        "energy": 0.0289,
+        "tap": 0,
+        "shake": 0.4567,
+        "twist": 0.0787,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14375,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0198,
+        "energy": 0.0207,
+        "tap": 0,
+        "shake": 0.4331,
+        "twist": 0.0709,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14433,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0185,
+        "energy": 0.021,
+        "tap": 0,
+        "shake": 0.4094,
+        "twist": 0.0709,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.622,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14483,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0147,
+        "energy": 0.015,
+        "tap": 0,
+        "shake": 0.4094,
+        "twist": 0.0709,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.622,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14533,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0179,
+        "energy": 0.0238,
+        "tap": 0,
+        "shake": 0.378,
+        "twist": 0.063,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14583,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0175,
+        "energy": 0.024,
+        "tap": 0,
+        "shake": 0.3622,
+        "twist": 0.063,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.5984,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14633,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0173,
+        "energy": 0.0245,
+        "tap": 0,
+        "shake": 0.3386,
+        "twist": 0.0551,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14683,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0138,
+        "energy": 0.0175,
+        "tap": 0,
+        "shake": 0.3386,
+        "twist": 0.0551,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14741,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0106,
+        "energy": 0.0119,
+        "tap": 0,
+        "shake": 0.3228,
+        "twist": 0.0551,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14791,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0085,
+        "energy": 0.0086,
+        "tap": 0,
+        "shake": 0.3071,
+        "twist": 0.0551,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14842,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0097,
+        "energy": 0.0123,
+        "tap": 0,
+        "shake": 0.2913,
+        "twist": 0.0472,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14892,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0109,
+        "energy": 0.0153,
+        "tap": 0,
+        "shake": 0.2756,
+        "twist": 0.0472,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 14942,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0086,
+        "energy": 0.011,
+        "tap": 0,
+        "shake": 0.2598,
+        "twist": 0.0472,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15000,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0066,
+        "energy": 0.0074,
+        "tap": 0,
+        "shake": 0.2598,
+        "twist": 0.0472,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.2598,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15058,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0116,
+        "energy": 0.0188,
+        "tap": 0,
+        "shake": 0.2362,
+        "twist": 0.0394,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15108,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0092,
+        "energy": 0.0135,
+        "tap": 0,
+        "shake": 0.2362,
+        "twist": 0.0394,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15158,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0101,
+        "energy": 0.0152,
+        "tap": 0,
+        "shake": 0.2205,
+        "twist": 0.0394,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15216,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0106,
+        "energy": 0.0159,
+        "tap": 0,
+        "shake": 0.2126,
+        "twist": 0.0315,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15267,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0113,
+        "energy": 0.0171,
+        "tap": 0,
+        "shake": 0.2047,
+        "twist": 0.0315,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15317,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.015,
+        "energy": 0.0246,
+        "tap": 0,
+        "shake": 0.189,
+        "twist": 0.0315,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15367,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0119,
+        "energy": 0.0177,
+        "tap": 0,
+        "shake": 0.1811,
+        "twist": 0.0315,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15417,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0095,
+        "energy": 0.0127,
+        "tap": 0,
+        "shake": 0.1732,
+        "twist": 0.0315,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15467,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0076,
+        "energy": 0.0091,
+        "tap": 0,
+        "shake": 0.1732,
+        "twist": 0.0315,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15517,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0088,
+        "energy": 0.012,
+        "tap": 0,
+        "shake": 0.1654,
+        "twist": 0.0236,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6142,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15567,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0103,
+        "energy": 0.0155,
+        "tap": 0,
+        "shake": 0.1496,
+        "twist": 0.0236,
+        "freefall": 0,
+        "tilt_x": 0.0709,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    },
+    {
+      "t": 15624,
+      "values": {
+        "roll_speed": 0,
+        "roll_rate": 0.0113,
+        "energy": 0.0179,
+        "tap": 0,
+        "shake": 0.1417,
+        "twist": 0.0236,
+        "freefall": 0,
+        "tilt_x": 0.0787,
+        "tilt_y": 0.6063,
+        "tilt_z": 0.252,
+        "movement": 1,
+        "g:gmr4sga0m": 0
+      }
+    }
+  ]
+}

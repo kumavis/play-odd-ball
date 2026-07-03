@@ -27,6 +27,10 @@ frame ("HOME", pitch/roll/yaw) is defined in `docs/RECORDING-PROTOCOL.md`.
   yaw is invisible, "tip away" and "tip left" can produce the same signal (Series
   C) — orientation-invariant matching cannot rely on lean *direction* unless the
   grip is fixed/known.
+- **Whole-arm "throw" gestures are the reliable grip-independent triggers.**
+  `arm-catapult` and `backhand-invert` saturate `energy`/`movement`/`shake` (and
+  emit Notes) identically at any onset orientation — the practical building block
+  when the grip is unknown.
 - **The event channels work, but need fast/sharp motion and cross-talk heavily.**
   CC0 Shake, CC1 Twist, CC2 Freefall, CC6 Movement all sat at zero through the
   slow Series A; Series B triggered them. CC6 in particular is a broadband
@@ -195,6 +199,35 @@ tilt-*magnitude* profile, the speed/energy profile, and any multi-phase temporal
 structure of the gesture. Reliable direction discrimination requires a
 fixed/known grip (or a gesture that itself establishes a tilt reference first).
 
+## Orientation-free gestures
+
+The counterpart to Series C: whole-arm "throw" moves detected by the
+intensity/event channels (`energy`, `movement`, `shake`, `freefall`, Notes), which
+don't depend on orientation. These fire the *same* way regardless of how the ball
+is held, so they are the natural building blocks for grip-independent triggers.
+
+**Shared signature:** `movement` (CC6) pegged high (never below ~0.5) and
+`energy`/`shake` saturating, while CC3/CC4/CC5 swing freely — i.e. the trigger
+comes entirely from the orientation-independent channels. Both are trivially
+separable from the Series C tips (energy ~0.2, movement low).
+
+- **`arm-catapult`** (session JSON, 7 reps). Every rep hits `energy` = 1.00 and
+  `movement` 0.71–1.00, with a **consistent `freefall` ≈ 0.34–0.39** (a genuine
+  airborne phase) and `shake` up to 1.00. Onset tilt ranged CC5 **0.16 → 0.94**
+  (upright through nearly inverted) with an **identical signature at every onset**
+  — confirming orientation-independence directly. First recording to drive CC2
+  Freefall meaningfully (B6's gentle drops only reached 0.22).
+- **`backhand-invert`** (raw capture, 8.3 s, fast forward-then-back reversals).
+  `movement` 0.57–1.00, `shake` (CC0) to 1.00, CC3/CC4/CC5 sweep the full 0.03–
+  0.97 as the ball inverts. The sharp reversal emits **Notes**: 4× Shake at
+  **velocity 127** plus 5 Taps and a Twist. `freefall` stays low (0.25) — no true
+  airborne phase.
+
+**Distinguishing the two:** the catapult has a sustained `freefall` (~0.4) and no
+taps; the backhand-invert has near-zero freefall but Shake-note bursts (vel 127) +
+Taps from the reversal. So freefall + Note pattern separate them even though both
+saturate energy/movement.
+
 ## Custom recordings
 
 - **`home-grip-twist`:** a repeated slow "doorknob" double-twist
@@ -220,13 +253,18 @@ Source: `data/B3-raw.txt` (full-rate `listen.py --raw` capture).
 - The in-browser **session recorder logs only ~15–20 Hz**, undersampling ~3–4×.
   Fast gestures alias badly in the session JSON; use the raw capture for any
   timing/rate analysis.
+- **Caveat:** the browser **⏺ Raw** button logged only ~94 msg/s during
+  `backhand-invert`, far below `listen.py`'s 405 — the Web MIDI layer may coalesce
+  rapid CC updates. Prefer `listen.py --raw` for authoritative timing until this is
+  checked with a controlled side-by-side.
 
 ## Method & data
 
 - Recordings live in `data/`: Series A (`A1`–`A5`, `A5B`), Series B
   (`B1-pitch`, `B1-roll`, `B1-roll2`, `B2`, `B3` + `B3-raw.txt`, `B4`–`B7`),
   Series C (`C1`–`C5`), noise floor (`D1`, `D2`), Series E (`E1`, `E1B`,
-  `E4-raw.txt`), and the custom `home-grip-twist`.
+  `E4-raw.txt`), orientation-free gestures (`arm-catapult`, `backhand invert`),
+  and the custom `home-grip-twist`.
 - Session JSON files come from the web app's **⏺ Record** button; `*-raw.txt`
   from `.venv/bin/python listen.py --raw` (or the new **⏺ Raw** button).
 - Analysis was per-channel spans, single-step deltas (wrap test), cross-channel
