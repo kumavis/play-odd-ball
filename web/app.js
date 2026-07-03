@@ -3100,6 +3100,20 @@ async function connectBluetoothBall() {
   } catch (err) {
     if (err && err.name === "NotFoundError") return;  // user dismissed the chooser
     els.hint.classList.remove("hide");
+    // Brave (and some managed Chrome installs) disable Web Bluetooth entirely,
+    // so requestDevice rejects with a SecurityError before any chooser appears.
+    // This is a *different* permission from "MIDI device control" — enabling MIDI
+    // does nothing here. Point the user at Brave's flag rather than the raw error.
+    const blocked = err && (err.name === "SecurityError" ||
+      /permission has been blocked|globally disabled|Web Bluetooth API is not allowed/i.test(err.message || ""));
+    if (blocked) {
+      els.hint.innerHTML = "<p><strong>Web Bluetooth is blocked by your browser.</strong> " +
+        "This is separate from “MIDI device control.” In <strong>Brave</strong>, open " +
+        "<code>brave://flags/#brave-web-bluetooth-api</code>, set <em>Web Bluetooth API</em> to " +
+        "<em>Enabled</em>, relaunch, then reload this page. (Plain Chrome or Edge work without any flag.) " +
+        "You can also pair via <em>Audio MIDI Setup</em> and pick the port above.</p>";
+      return;
+    }
     els.hint.innerHTML = `<p><strong>Bluetooth pairing failed.</strong> ${escHtml(err)}</p>`;
     return;
   }
