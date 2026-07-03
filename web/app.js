@@ -2218,11 +2218,17 @@ function setSeqMode(mode) {
 function updateInstruments() {
   const svg = document.getElementById("graphSvg");
   const now = performance.now();
+  // When the orbit view is active the rack (#graph) is display:none, so its
+  // port nodes report a null offsetParent and portCenter() would throw. Skip all
+  // rack DOM work in that case (the orbit renderer draws the cables instead), but
+  // still push audio levels every frame so sound keeps playing in either view.
+  const rackVisible = !orbit.active;
   for (const inst of INSTRUMENTS) {
     const conn = connections[inst.key];
     const v = shape(conn, inst.key);
     if (inst.key !== "chimes") audio.setVoice(inst.key, v);
     else updateChimes(conn, v, now);
+    if (!rackVisible) continue;
 
     // Draw / update the cable for this instrument's connection.
     let c = graph.cables[inst.key];
@@ -2249,11 +2255,13 @@ function updateInstruments() {
       c.line.remove(); c.hit.remove(); delete graph.cables[inst.key];
     }
   }
-  // Source node live-value bars.
-  for (const key in graph.srcVals) {
-    graph.srcVals[key].style.width = `${paramValue(key) * 100}%`;
+  // Source node live-value bars (rack only).
+  if (rackVisible) {
+    for (const key in graph.srcVals) {
+      graph.srcVals[key].style.width = `${paramValue(key) * 100}%`;
+    }
   }
-  // Live meter inside the connection editor.
+  // Live meter inside the connection editor (works in either view).
   if (editing && connections[editing]) {
     const conn = connections[editing];
     els.ceMeterIn.style.width = `${clamp1(paramValue(conn.source)) * 100}%`;
