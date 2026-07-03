@@ -1140,14 +1140,21 @@ function updateRecMoveBtn() {
 
 function toggleRecordMove() {
   if (recordingGesture) { finishRecordMove(); return; }
-  const name = (window.prompt(
-    "Name this move, then perform it. Repeat it a few times (pause between reps) to build a more reliable trigger, then click ✋ again to finish.",
-    `Move ${gestures.length + 1}`) || "").trim();
-  if (!name) return;
-  recordingGesture = { name, targetId: null, examples: [] };
+  // No naming prompt up front (a blocking dialog would also stall the MIDI
+  // loop): the move is created with a default name on finish and the editor
+  // opens with the name field selected, ready to type over.
+  recordingGesture = { name: null, targetId: null, examples: [] };
   // Start fresh; the next bursts of motion become the examples.
   for (const id in gestPipes) gestPipes[id].seg = null;
   updateRecMoveBtn();
+}
+
+// Open a just-created move in the editor with its name selected, so renaming
+// is a single keystroke away.
+function openGestureEditorForRename(g) {
+  openGestureEditor(g.id);
+  els.geName.focus();
+  els.geName.select();
 }
 
 // Finish an armed recording: build a new move from the captured examples, or —
@@ -1173,7 +1180,7 @@ function finishRecordMove() {
       drawGestureEditor();
     }
   } else {
-    saveGesture(rec.name, rec.examples);
+    openGestureEditorForRename(saveGesture(rec.name, rec.examples));
   }
 }
 
@@ -1197,14 +1204,11 @@ function importSessionFile(file) {
     // Pull out every rep in the recording; each becomes an example of one move.
     const regions = activeRegions(frames);
     if (!regions.length) { logEvent("<b>IMPORT</b> couldn't find a move in that recording", "note"); return; }
-    const suggested = (file.name || "Imported move").replace(/\.json$/i, "").replace(/^oddball-session-.*$/, "Imported move");
-    const name = (window.prompt(
-      regions.length > 1
-        ? `Found ${regions.length} performances — they'll build one trigger. Name this move:`
-        : "Name this imported move:",
-      suggested) || "").trim();
-    if (!name) return;
-    saveGesture(name, regions);   // list of raw-row examples
+    // Default the name from the file (falling back to "Move N" for the
+    // recorder's timestamped filenames) and rename in the editor instead of a
+    // blocking prompt.
+    const suggested = (file.name || "").replace(/\.json$/i, "").replace(/^oddball-session-.*$/, "").trim() || null;
+    openGestureEditorForRename(saveGesture(suggested, regions));   // regions = raw-row examples
   };
   reader.readAsText(file);
 }
