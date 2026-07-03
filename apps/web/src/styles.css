@@ -26,6 +26,9 @@ html, body {
 }
 
 body { display: flex; flex-direction: column; height: 100vh; }
+/* The Preact app mounts inside #root, so it must forward the body's flex
+ * column to the header/main children the layout was written for. */
+#root { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
 .topbar {
   flex: 0 0 auto;
@@ -697,3 +700,14 @@ body { display: flex; flex-direction: column; height: 100vh; }
 }
 .hint code { color: var(--accent-2); }
 .hint.hide { display: none; }
+
+/* ---- Preact conversion additions: counter-examples + attempt selection ---- */
+.gedit-counters .gedit-ex-title { color: #ff8fa3; }
+.gedit-ex--counter { border-color: rgba(255,93,115,0.55); color: #ff8fa3; }
+.gedit-ex--counter.is-active { border-color: #ff5d73; box-shadow: 0 0 8px rgba(255,93,115,0.45); }
+.at--counter { background: #c792ea; }
+.gedit-attempts .at { cursor: pointer; }
+.gedit-attempts .at.is-selected { outline: 1px solid var(--ink, #e9ecff); outline-offset: 1px; }
+.gedit-mini--counter { margin-left: 8px; border-color: rgba(255,93,115,0.55); color: #ff8fa3; }
+.gedit-mini--counter:hover { border-color: #ff5d73; color: #ff5d73; }
+.gedit-attempt-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
