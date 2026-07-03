@@ -24,6 +24,18 @@ Audio MIDI Setup required. Open the page in Chrome or Edge (over HTTPS or
 chooser. It streams straight into the visualizer. Balls already paired through
 Audio MIDI Setup still show up in the port dropdown as before.
 
+### Run the web app locally
+
+The app is just static files, but Web Bluetooth (and Web MIDI) require a secure
+context, so serve it over `localhost` rather than opening the file directly:
+
+```bash
+cd web && python3 -m http.server 8000
+```
+
+Then open <http://localhost:8000/> in Chrome or Edge (not Brave, unless you've
+enabled `brave://flags/#brave-web-bluetooth-api`).
+
 ## Setup
 
 Requires Python **3.10+** (`listen.py` uses modern type syntax).
