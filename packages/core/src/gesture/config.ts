@@ -43,6 +43,11 @@ export const HIST_MS = 4000; // per-device feature-history buffer length
 
 // Matching.
 export const GEST_MARGIN = 0.05; // winner must beat runner-up by this much
+// Counter-example veto bias: a candidate this close to a counter-example
+// (relative to its distance to the real examples) must not fire. Separate
+// from GEST_MARGIN so veto aggressiveness can be tuned without touching
+// tiebreak behavior.
+export const GEST_COUNTER_MARGIN = 0.05;
 export const GEST_DUR_RATIO = 2; // duration gate looseness (see durationOk)
 export const GEST_ARC_RATIO = 2; // arc gate looseness (see arcOk)
 export const GEST_ATTEMPTS_MAX = 12; // per-move attempt ring buffer (debug UI)

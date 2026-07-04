@@ -60,6 +60,19 @@ export interface ConnectBleBallOptions {
 
 export type BleErrorKind = "cancelled" | "blocked" | "unavailable" | "error";
 
+// Re-pairing an already-connected ball hands back the SAME cached device /
+// characteristic objects (gatt.connect() on a live session is a no-op), so a
+// second connectBleBall would stack a second value listener and every message
+// would be delivered twice. Track our listeners per object and replace them.
+const charListeners = new WeakMap<object, EventListener>();
+const deviceListeners = new WeakMap<object, EventListener>();
+const swapListener = (target: EventTarget, event: string, map: WeakMap<object, EventListener>, listener: EventListener) => {
+  const prev = map.get(target);
+  if (prev) target.removeEventListener(event, prev);
+  map.set(target, listener);
+  target.addEventListener(event, listener);
+};
+
 /** Thrown by connectBleBall with a classification the UI can message on. */
 export class BleConnectError extends Error {
   kind: BleErrorKind;
@@ -111,14 +124,14 @@ export async function connectBleBall(opts: ConnectBleBallOptions): Promise<BleBa
     const server = await device.gatt!.connect();
     const service = await server.getPrimaryService(BLE_MIDI_SERVICE);
     const char = await service.getCharacteristic(BLE_MIDI_CHARACTERISTIC);
-    char.addEventListener("characteristicvaluechanged", (ev) => {
+    swapListener(char, "characteristicvaluechanged", charListeners, (ev) => {
       // The characteristic value is a DataView that need not span its whole
       // ArrayBuffer — honor its offset/length or the packet bytes are wrong.
       const v = (ev.target as BluetoothRemoteGATTCharacteristic).value!;
       const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
       for (const msg of decodeBleMidi(bytes)) opts.onMessage(msg, identity);
     });
-    device.addEventListener("gattserverdisconnected", () => opts.onDisconnect?.(identity));
+    swapListener(device, "gattserverdisconnected", deviceListeners, () => opts.onDisconnect?.(identity));
     await char.startNotifications();
     return {
       ...identity,

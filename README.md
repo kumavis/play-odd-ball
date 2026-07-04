@@ -37,6 +37,9 @@ Setup still show up in the port dropdown as before.
   view, gesture editor, synth), built with Vite on top of `@oddball/core`.
 - [`docs/CONVERSION-NOTES.md`](docs/CONVERSION-NOTES.md) — bugs and issues
   found (fixed vs. preserved) during the TypeScript/Preact rewrite.
+- [`docs/IMPLEMENTATION-REVIEW.md`](docs/IMPLEMENTATION-REVIEW.md) — post-rewrite
+  review: bug findings (fixed), a measured analysis of gesture-recognition
+  false positives, and which improvements survived benchmarking.
 
 ### Run the web app locally
 

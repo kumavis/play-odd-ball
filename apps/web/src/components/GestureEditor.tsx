@@ -75,12 +75,17 @@ export function GestureEditor() {
     dragRef.current = null;
     editingGestureSig.value = null;
   };
+  // The keydown effect below runs once per editor open (deps [id]), so its
+  // handler must reach the CURRENT close — a captured one predates any armed
+  // capture and would close the editor while recording silently continues.
+  const closeRef = useRef(close);
+  closeRef.current = close;
 
   // Escape closes; a freshly opened editor selects the name for typing over.
   useEffect(() => {
     if (!g) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") closeRef.current();
     };
     window.addEventListener("keydown", onKey);
     nameRef.current?.focus();

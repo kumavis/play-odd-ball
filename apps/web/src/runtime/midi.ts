@@ -159,10 +159,15 @@ export async function connectBluetoothBall(): Promise<void> {
     hintSig.value = { kind: "bt-failed", detail: String(err) };
     return;
   }
-  if (bleInputs.some((p) => p.id === ball.id)) {
-    // Already paired (double click): the fresh GATT session replaces the old
-    // one; just refresh status.
+  const existing = bleInputs.findIndex((p) => p.id === ball.id);
+  if (existing !== -1) {
+    // Already paired (double click): connectBleBall swapped its listeners
+    // onto the same live session, so keep the fresh handle — the old one
+    // would still disconnect the shared GATT session, but only the new one
+    // matches the listeners now attached.
+    bleInputs[existing] = ball;
     syncActiveInputs();
+    logEvent("", `Bluetooth ball ${ball.name} already connected`);
     return;
   }
   bleInputs.push(ball);

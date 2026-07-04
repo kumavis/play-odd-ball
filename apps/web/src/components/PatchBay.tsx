@@ -73,6 +73,12 @@ interface LinkState {
   downX: number;
   downY: number;
   temp: SVGPathElement;
+  // The exact handler identities attached by startLink, so clearLink removes
+  // what was really added — a clearLink captured by an older render would
+  // otherwise remove that render's (never-attached) functions and leak one
+  // window pointermove listener per cancelled link.
+  move: (e: PointerEvent) => void;
+  up: (e: PointerEvent) => void;
 }
 
 function RackGraph() {
@@ -163,8 +169,8 @@ function RackGraph() {
   const clearLink = () => {
     const l = link.current;
     if (!l) return;
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onLinkPointerUp);
+    window.removeEventListener("pointermove", l.move);
+    window.removeEventListener("pointerup", l.up);
     document.querySelectorAll(".gport.is-target").forEach((n) => n.classList.remove("is-target"));
     l.fromPort.classList.remove("is-source");
     l.temp.remove();
@@ -199,9 +205,9 @@ function RackGraph() {
   };
 
   const onLinkPointerUp = (e: PointerEvent) => {
-    window.removeEventListener("pointerup", onLinkPointerUp);
     const l = link.current;
     if (!l) return;
+    window.removeEventListener("pointerup", l.up);
     const over = document.elementFromPoint(e.clientX, e.clientY);
     const p = over && (over.closest(".gport") as HTMLElement | null);
     if (p && p.dataset.port !== l.fromType) {
@@ -225,7 +231,17 @@ function RackGraph() {
     temp.setAttribute("stroke-width", "2.5");
     svgRef.current!.appendChild(temp);
     port.classList.add("is-source");
-    link.current = { fromType, fromKey, mode: "drag", fromPort: port, downX: e.clientX, downY: e.clientY, temp };
+    link.current = {
+      fromType,
+      fromKey,
+      mode: "drag",
+      fromPort: port,
+      downX: e.clientX,
+      downY: e.clientY,
+      temp,
+      move: onPointerMove,
+      up: onLinkPointerUp,
+    };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onLinkPointerUp);
     onPointerMove(e); // draw the initial stub immediately

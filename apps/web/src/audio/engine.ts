@@ -173,7 +173,19 @@ export class AudioEngine {
       if (!this.previewing || this.previewing[key] !== id) return; // cancelled/superseded
       const el = performance.now() - start;
       if (el >= dur) {
+        // Glide voices move only ~10% toward zero per set(0); with sound off
+        // nothing else glides them down, so keep ticking until silent (the
+        // preview keeps owning the voice) then hard-zero. Event voices keep
+        // level at exactly 0 and a fixed out gain — leave those alone.
         v.set(0);
+        if (v.level > 0.001) {
+          requestAnimationFrame(tick);
+          return;
+        }
+        if (v.level > 0) {
+          v.level = 0;
+          v.out.gain.value = 0;
+        }
         this.previewing[key] = 0;
         return;
       }
@@ -1282,20 +1294,26 @@ export class AudioEngine {
     const o = ctx.createOscillator();
     o.type = "square";
     o.frequency.value = 4200 + Math.random() * 1500;
+    // Tremolo must MULTIPLY the enveloped signal (its own 0..1 gain stage),
+    // not sum into g.gain: the ±0.5 LFO summed onto a ≤0.11 envelope swung
+    // the gain between ≈−0.44 and +0.56 — ~5-10× louder than every other
+    // one-shot, phase-inverting instead of gating, envelope inaudible.
     const trem = ctx.createOscillator();
     trem.type = "square";
     trem.frequency.value = 45;
     const tremG = ctx.createGain();
-    tremG.gain.value = 0.5;
+    tremG.gain.value = 0.5; // ±1 square × 0.5 + 0.5 base → gates 0..1
+    const tremStage = ctx.createGain();
+    tremStage.gain.value = 0.5;
     const g = ctx.createGain();
     g.gain.value = 0;
     const bp = ctx.createBiquadFilter();
     bp.type = "bandpass";
     bp.frequency.value = 5000;
     bp.Q.value = 6;
-    trem.connect(tremG).connect(g.gain);
+    trem.connect(tremG).connect(tremStage.gain);
     trem.start(t);
-    o.connect(bp).connect(g).connect(dest);
+    o.connect(bp).connect(g).connect(tremStage).connect(dest);
     o.start(t);
     const dur = 0.12 + Math.random() * 0.14;
     g.gain.setValueAtTime(0, t);
@@ -1304,7 +1322,10 @@ export class AudioEngine {
     g.gain.linearRampToValueAtTime(0, t + dur);
     o.stop(t + dur + 0.02);
     trem.stop(t + dur + 0.02);
-    setTimeout(() => g.disconnect(), (dur + 0.1) * 1000);
+    setTimeout(() => {
+      g.disconnect();
+      tremStage.disconnect();
+    }, (dur + 0.1) * 1000);
   }
 
   // ---- UFO warble (random FM sci-fi) -------------------------------------------

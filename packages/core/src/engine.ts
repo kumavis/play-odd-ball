@@ -128,13 +128,32 @@ export class OddballEngine {
 
   /** Forget one device's state (unplugged / BLE dropped). */
   removeDevice(deviceId: string): void {
+    const dev = this.deviceCc[deviceId];
     delete this.deviceCc[deviceId];
     this.recognizer.removeDevice(deviceId);
+    // Recompute the aggregate without the departed device — otherwise its
+    // last values stay baked into the average (and, once the last device is
+    // gone, keep driving instruments forever).
+    if (dev) {
+      for (const ctrl in dev) {
+        const c = Number(ctrl);
+        let reported = false;
+        for (const id in this.deviceCc) {
+          if (this.deviceCc[id][c] !== undefined) {
+            reported = true;
+            break;
+          }
+        }
+        if (reported) this.cc[c] = this.aggregateCc(c);
+        else delete this.cc[c];
+      }
+    }
   }
 
   /** Forget every device's state (rebinding the input set). */
   resetDevices(): void {
     for (const k in this.deviceCc) delete this.deviceCc[k];
+    for (const k in this.cc) delete this.cc[k];
     this.recognizer.clearPipes();
     this.roll.reset();
   }

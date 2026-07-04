@@ -121,6 +121,12 @@ export function moveInSequence(instKey: string, dir: -1 | 1): void {
 
 export function disconnect(instKey: string): void {
   connections[instKey] = null;
+  // Drop this instrument's pending chain steps and trigger envelope so a
+  // step scheduled milliseconds ago can't fire into a rewired patch.
+  for (let i = seqQueue.length - 1; i >= 0; i--) {
+    if (seqQueue[i].instKey === instKey) seqQueue.splice(i, 1);
+  }
+  delete seqEnv[instKey];
   if (instKey === "chimes") audio.chimesOn = false;
   if (connEditorSig.peek()?.instKey === instKey) connEditorSig.value = null;
   touchConnections();
