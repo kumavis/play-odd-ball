@@ -449,6 +449,17 @@ class Orbit {
       if (connEditorSig.peek()?.instKey === inst.key) {
         this.cable(this.portOut(src), this.portIn(dst), "#ffffff", 1.2, 0.5);
       }
+      // Optional second (note) input: thin dashed cable, display-only (parity
+      // with the rack view; edit it via the trigger cable's editor).
+      if (conn.noteSource) {
+        const nsrc = this.byKey["p:" + conn.noteSource];
+        if (nsrc) {
+          this.ctx.save();
+          this.ctx.setLineDash([6, 5]);
+          this.cable(this.portOut(nsrc), this.portIn(dst), paramByKey(conn.noteSource)?.color || "#8b90b8", 1.2, 0.5);
+          this.ctx.restore();
+        }
+      }
     }
 
     // in-progress link

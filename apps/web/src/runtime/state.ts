@@ -11,7 +11,10 @@ export const engine = new OddballEngine();
 export const audio = new AudioEngine();
 
 // ---- Instruments ---------------------------------------------------------
-export const INSTRUMENTS: InstrumentDef[] = [...AudioEngine.INSTRUMENTS, { key: "chimes", label: "Chimes" }];
+export const INSTRUMENTS: InstrumentDef[] = [
+  ...AudioEngine.INSTRUMENTS,
+  { key: "chimes", label: "Chimes", noted: true },
+];
 
 // ---- Connections ---------------------------------------------------------
 // Each instrument input takes one parameter (or none). A connection carries a
@@ -23,6 +26,10 @@ export interface Conn {
   atten: number;
   thresh: number;
   order?: number;
+  /** Optional second input for the `noted` instruments: the parameter whose
+   * 0..1 value picks the pitch of each event (e.g. tap triggers the piano,
+   * Orient X chooses the note). Absent = the instrument's own pitch logic. */
+  noteSource?: string;
 }
 
 export const clamp1 = (v: number) => Math.max(0, Math.min(1, v));

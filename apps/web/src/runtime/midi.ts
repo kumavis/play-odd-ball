@@ -13,7 +13,7 @@ import {
   logEvent,
   statusSig,
 } from "./state";
-import { chimeDirect } from "./patch";
+import { chimeDirect, chimePitch } from "./patch";
 import { rawRecPush } from "./recording";
 
 export interface PortOption {
@@ -50,7 +50,7 @@ export function onMidiMessage(deviceId: string, data: MidiBytes): void {
     // Pitch follows X orientation (CC3) so moving the ball plays different
     // notes. Only the direct tap→chimes patch fires from here; other sources
     // trigger chimes from their own value edges in the frame loop.
-    if (res.isTap && chimeDirect(connections.chimes)) audio.hit(ev.velocity, (engine.cc[3] ?? 64) / 127);
+    if (res.isTap && chimeDirect(connections.chimes)) audio.hit(ev.velocity, chimePitch(connections.chimes));
     logEvent("NOTE", `${noteName(ev.note)} (${ev.note}) vel ${ev.velocity}${res.noteGesture ? ` · ${res.noteGesture}` : ""}`, "note");
   } else if (ev.kind === "pitchBend") {
     logEvent("PITCH", String(ev.value));

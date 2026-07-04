@@ -89,6 +89,7 @@ function RackGraph() {
   const sparkRefs = useRef(new Map<string, HTMLCanvasElement>());
   const valRefs = useRef(new Map<string, HTMLElement>());
   const cables = useRef(new Map<string, { line: SVGPathElement; hit: SVGPathElement }>());
+  const noteCables = useRef(new Map<string, SVGPathElement>()); // instKey -> dashed note-input cable
   const link = useRef<LinkState | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -155,6 +156,24 @@ function RackGraph() {
         c.line.remove();
         c.hit.remove();
         cables.current.delete(inst.key);
+      }
+      // Optional second (note) input: a thin dashed cable, display-only — the
+      // hit-area/editor stays on the trigger cable.
+      const notePort = conn?.noteSource ? srcPorts.current.get(conn.noteSource) : undefined;
+      const instPort = instPorts.current.get(inst.key);
+      let nc = noteCables.current.get(inst.key);
+      if (conn && notePort && instPort) {
+        if (!nc) {
+          nc = document.createElementNS(SVGNS, "path");
+          nc.setAttribute("class", "cable-note");
+          svg.appendChild(nc);
+          noteCables.current.set(inst.key, nc);
+        }
+        nc.setAttribute("d", cablePath(portCenter(notePort), portCenter(instPort)));
+        nc.setAttribute("stroke", paramByKey(conn.noteSource!)?.color || "#8b90b8");
+      } else if (nc) {
+        nc.remove();
+        noteCables.current.delete(inst.key);
       }
     }
     for (const p of paramsList()) {

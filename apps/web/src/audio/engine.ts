@@ -10,15 +10,27 @@ const PENTATONIC = [0, 3, 5, 7, 10]; // minor pentatonic semitone offsets
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
+/** Map a 0..1 note position onto `octaves` octaves of a scale (low → high). */
+const scaleDeg = (scale: number[], note: number, octaves = 2): number => {
+  const steps = scale.length * octaves;
+  const k = Math.min(steps - 1, Math.floor(clamp01(note) * steps));
+  return scale[k % scale.length] + 12 * Math.floor(k / scale.length);
+};
+
 export interface InstrumentDef {
   key: string;
   label: string;
+  /** Accepts an optional second "note" input that picks the pitch of each
+   * event (e.g. tap triggers the piano, Orient X chooses the note). */
+  noted?: boolean;
 }
 
 interface Voice {
   out: GainNode;
   level: number;
-  set: (v: number) => void;
+  /** `note` (0..1), when provided, overrides the voice's own pitch choice —
+   * only the `noted` instruments read it. */
+  set: (v: number, note?: number) => void;
   // per-voice scratch state used by the event/arp voices
   last?: number;
   phase?: number;
@@ -54,11 +66,11 @@ export class AudioEngine {
       { key: "choir", label: "Ghost choir" },
       { key: "pad", label: "Warm pad" },
       { key: "organ", label: "Drone organ" },
-      { key: "bells", label: "Shimmer bells" },
+      { key: "bells", label: "Shimmer bells", noted: true },
       { key: "wind", label: "Noise wind" },
-      { key: "pluck", label: "Pluck arp" },
-      { key: "piano", label: "Piano walk" },
-      { key: "acid", label: "Acid 303" },
+      { key: "pluck", label: "Pluck arp", noted: true },
+      { key: "piano", label: "Piano walk", noted: true },
+      { key: "acid", label: "Acid 303", noted: true },
       { key: "wobble", label: "Wobble bass" },
       { key: "growl", label: "Monster growl" },
       { key: "siren", label: "Siren" },
@@ -67,7 +79,7 @@ export class AudioEngine {
       { key: "whale", label: "Whale song" },
       { key: "crickets", label: "Crickets" },
       { key: "ufo", label: "UFO warble" },
-      { key: "gamelan", label: "Gamelan" },
+      { key: "gamelan", label: "Gamelan", noted: true },
       { key: "geiger", label: "Geiger clicks" },
     ];
   }
@@ -135,12 +147,13 @@ export class AudioEngine {
     if (this.ctx) this.ctx.suspend();
   }
 
-  /** Route a 0..1 parameter value into a continuous voice. */
-  setVoice(key: string, value: number): void {
+  /** Route a 0..1 parameter value into a continuous voice. `note` (0..1),
+   * when given, picks the pitch of the noted instruments' next event. */
+  setVoice(key: string, value: number, note?: number): void {
     if (!this.enabled) return;
     if (this.previewing && this.previewing[key]) return; // a preview owns this voice
     const v = this.voices[key];
-    if (v) v.set(clamp01(value));
+    if (v) v.set(clamp01(value), note);
   }
 
   // Play a short, representative demo of a single instrument so the user can
@@ -465,7 +478,7 @@ export class AudioEngine {
     out.gain.value = 1; // plucks manage their own envelopes; out is a bus
     const voice: Voice = { out, level: 0, last: 0, phase: 0, active: 0, set: () => {} };
     const scale = [0, 3, 5, 7, 10, 12]; // pentatonic-ish steps
-    voice.set = (v) => {
+    voice.set = (v, note) => {
       voice.active = v; // gate handled at trigger time
       const now = performance.now();
       if (v <= 0.02) {
@@ -475,8 +488,10 @@ export class AudioEngine {
       const interval = 260 - v * 190; // fast (70ms) when high, slow (260ms) when low
       if (now - voice.last! >= interval) {
         voice.last = now;
-        const deg = scale[voice.phase! % scale.length] + 12 * Math.floor(v * 2);
-        voice.phase!++;
+        const deg =
+          typeof note === "number"
+            ? scaleDeg(scale, note)
+            : scale[voice.phase!++ % scale.length] + 12 * Math.floor(v * 2);
         this._pluck(mtof(52 + deg), 0.12 + v * 0.25, out);
       }
     };
@@ -507,13 +522,22 @@ export class AudioEngine {
     const scale = [0, 2, 4, 5, 7, 9, 11]; // major
     const span = 17; // steps up before turning back down
     const voice: Voice = { out, level: 0, last: 0, step: 0, set: () => {} };
-    voice.set = (v) => {
+    voice.set = (v, note) => {
       if (!this._due(voice, v, 170, 820)) return;
-      const pos = voice.step! % (span * 2);
-      const idx = pos <= span ? pos : span * 2 - pos; // 0..span..0 ping-pong
+      let idx: number;
+      let root: number;
+      if (typeof note === "number") {
+        // A note input plays the keyboard directly: the walk pauses and the
+        // register stays put so pitch tracks ONLY the note parameter.
+        idx = Math.round(clamp01(note) * span);
+        root = 48;
+      } else {
+        const pos = voice.step! % (span * 2);
+        idx = pos <= span ? pos : span * 2 - pos; // 0..span..0 ping-pong
+        voice.step!++;
+        root = 48 + Math.round(v * 5); // value nudges the register
+      }
       const deg = scale[idx % scale.length] + 12 * Math.floor(idx / scale.length);
-      voice.step!++;
-      const root = 48 + Math.round(v * 5); // value nudges the register
       this._pianoNote(mtof(root + deg), 0.1 + v * 0.28, out);
     };
     return voice;
@@ -1018,9 +1042,12 @@ export class AudioEngine {
     out.gain.value = 1;
     const scale = [0, 2, 4, 7, 9, 12, 16];
     const voice: Voice = { out, level: 0, last: 0, set: () => {} };
-    voice.set = (v) => {
+    voice.set = (v, note) => {
       if (this._due(voice, v, 90, 700)) {
-        const deg = scale[Math.floor(Math.random() * scale.length)] + 12 * Math.floor(Math.random() * 2);
+        const deg =
+          typeof note === "number"
+            ? scaleDeg(scale, note)
+            : scale[Math.floor(Math.random() * scale.length)] + 12 * Math.floor(Math.random() * 2);
         this._ping(mtof(72 + deg), 0.06 + v * 0.12, out, 1.2 + v * 1.8, 1.41);
       }
     };
@@ -1033,7 +1060,7 @@ export class AudioEngine {
     out.gain.value = 1;
     const scale = [0, 3, 5, 6, 7, 10];
     const voice: Voice = { out, level: 0, last: 0, phase: 0, set: () => {} };
-    voice.set = (v) => {
+    voice.set = (v, note) => {
       const now = performance.now();
       if (v <= 0.02) {
         voice.last = now;
@@ -1042,7 +1069,10 @@ export class AudioEngine {
       const interval = 240 - v * 175;
       if (now - voice.last! >= interval) {
         voice.last = now;
-        const deg = scale[voice.phase! % scale.length] + 12 * (voice.phase! % 3 === 0 ? 1 : 0);
+        const deg =
+          typeof note === "number"
+            ? scaleDeg(scale, note)
+            : scale[voice.phase! % scale.length] + 12 * (voice.phase! % 3 === 0 ? 1 : 0);
         voice.phase!++;
         this._acidNote(mtof(40 + deg), 0.18 + v * 0.22, out, v);
       }
@@ -1369,7 +1399,7 @@ export class AudioEngine {
     out.gain.value = 1;
     const scale = [0, 2, 5, 7, 9]; // slendro-ish
     const voice: Voice = { out, level: 0, last: 0, phase: 0, set: () => {} };
-    voice.set = (v) => {
+    voice.set = (v, note) => {
       const now = performance.now();
       if (v <= 0.02) {
         voice.last = now;
@@ -1378,7 +1408,8 @@ export class AudioEngine {
       const interval = 360 - v * 250;
       if (now - voice.last! >= interval) {
         voice.last = now;
-        const deg = scale[voice.phase! % scale.length] + 12 * (voice.phase! % 2);
+        const deg =
+          typeof note === "number" ? scaleDeg(scale, note) : scale[voice.phase! % scale.length] + 12 * (voice.phase! % 2);
         voice.phase!++;
         this._ping(mtof(60 + deg), 0.08 + v * 0.12, out, 0.9 + v * 1.2, 3.47); // inharmonic ratio
       }

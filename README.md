@@ -35,6 +35,10 @@ Setup still show up in the port dropdown as before.
   dependencies; tested against the real recordings in [`data/`](data/).
 - [`apps/web`](apps/web/) — the Preact + TypeScript webapp (patch bay, orbit
   view, gesture editor, synth), built with Vite on top of `@oddball/core`.
+  Pitched instruments (chimes, piano, pluck, bells, gamelan, acid) take an
+  optional second **note** input alongside their trigger: click the cable and
+  pick a "note from" parameter — e.g. tap triggers the piano while Orient X
+  chooses which note it plays (shown as a thin dashed cable).
 - [`docs/CONVERSION-NOTES.md`](docs/CONVERSION-NOTES.md) — bugs and issues
   found (fixed vs. preserved) during the TypeScript/Preact rewrite.
 - [`docs/IMPLEMENTATION-REVIEW.md`](docs/IMPLEMENTATION-REVIEW.md) — post-rewrite

@@ -24,7 +24,7 @@ import {
   SPARK_MAX,
   paramsList,
 } from "./state";
-import { fireChain, shape, siblingsOf, updateChimes } from "./patch";
+import { connNote, fireChain, shape, siblingsOf, updateChimes } from "./patch";
 import { sampleSession, tickRawRec } from "./recording";
 
 function sampleSparks(): void {
@@ -40,7 +40,7 @@ function updateInstruments(now: number): void {
   for (const inst of INSTRUMENTS) {
     const conn = connections[inst.key];
     const v = shape(conn, inst.key);
-    if (inst.key !== "chimes") audio.setVoice(inst.key, v);
+    if (inst.key !== "chimes") audio.setVoice(inst.key, v, connNote(conn));
     else updateChimes(conn, v, now);
   }
 }

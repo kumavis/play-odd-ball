@@ -11,6 +11,7 @@ import {
   isGestureSource,
   gestureBySource,
   paramByKey,
+  paramsList,
   paramValue,
   touchConnections,
 } from "../runtime/state";
@@ -131,6 +132,31 @@ export function ConnEditor() {
         <div class="ce-meter-in" ref={meterInRef}></div>
         <div class="ce-meter-out" ref={meterOutRef}></div>
       </div>
+      {inst?.noted && (
+        <div class="ce-row ce-note">
+          <label title="A second input: this parameter's live value picks the pitch of each note this instrument plays. “auto” keeps the instrument's own melody logic.">
+            note from
+          </label>
+          <select
+            value={conn.noteSource ?? ""}
+            onChange={(e) => {
+              const val = (e.target as HTMLSelectElement).value;
+              if (val) conn.noteSource = val;
+              else delete conn.noteSource;
+              touchConnections();
+              saveStateSoon();
+              bump((n) => n + 1);
+            }}
+          >
+            <option value="">auto (own melody)</option>
+            {paramsList().map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       {showSeq && (
         <div class="ce-seq">
           <div class="ce-seq-head">

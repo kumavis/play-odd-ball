@@ -84,7 +84,7 @@ function serializeConnections(): Profile["connections"] {
   const out: Profile["connections"] = {};
   for (const k in connections) {
     const c = connections[k];
-    out[k] = c ? { source: c.source, atten: c.atten, thresh: c.thresh, order: c.order } : null;
+    out[k] = c ? { source: c.source, atten: c.atten, thresh: c.thresh, order: c.order, noteSource: c.noteSource } : null;
   }
   return out;
 }

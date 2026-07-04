@@ -191,6 +191,7 @@ body { display: flex; flex-direction: column; height: 100vh; }
 .graph-svg .cable-hit { pointer-events: stroke; cursor: pointer; fill: none; stroke: transparent; stroke-width: 16; }
 .graph-svg .cable.is-selected { stroke-dasharray: none; filter: drop-shadow(0 0 6px currentColor); }
 .graph-svg .cable-temp { pointer-events: none; fill: none; stroke-dasharray: 5 4; }
+.graph-svg .cable-note { pointer-events: none; fill: none; stroke-dasharray: 6 5; stroke-width: 1.4; stroke-opacity: 0.55; }
 
 .gnode {
   position: absolute;
