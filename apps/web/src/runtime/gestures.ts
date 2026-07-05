@@ -5,6 +5,7 @@ import {
   createGesture,
   gestureExamples,
   makeExample,
+  rawCaptureFeatureFrames,
   refreshGestureTemplates,
   serializeGestures,
   gestureFromData,
@@ -156,6 +157,13 @@ export function finishRecordMove(): void {
   if (rec.targetId) {
     const g = gesturesSig.peek().find((x) => x.id === rec.targetId);
     if (!g) {
+      // The target move was deleted mid-recording. Counter-examples are
+      // motions that must NOT fire it — saving them as a new move would
+      // create a gesture from exactly the wrong data, so discard instead.
+      if (rec.kind === "counter") {
+        logEvent("GESTURE", "the move those counter-examples were for was deleted — capture discarded", "note");
+        return;
+      }
       openForRename(saveGesture(rec.name, rec.examples));
       return;
     }
@@ -189,8 +197,9 @@ function openForRename(g: Gesture): void {
 }
 
 // ---- Session-file import ------------------------------------------------------
-/** Turn a recorded session JSON (from the Record button) into a move: every
- * rep found in it becomes one example. */
+/** Turn a recorded session JSON (⏺ Record) or raw capture (⏺ Raw) into a
+ * move: every rep found in it becomes one example. Raw captures are the
+ * higher-fidelity source — no ~20 Hz session-recorder aliasing. */
 export function importSessionFile(file: File): void {
   const reader = new FileReader();
   reader.onload = () => {
@@ -200,7 +209,7 @@ export function importSessionFile(file: File): void {
     } catch {
       data = null;
     }
-    const frames = sessionFeatureFrames(data);
+    const frames = sessionFeatureFrames(data) ?? rawCaptureFeatureFrames(data);
     if (!frames) {
       logEvent("IMPORT", "that file has no usable session samples", "note");
       return;

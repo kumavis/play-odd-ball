@@ -24,7 +24,7 @@ import {
   SPARK_MAX,
   paramsList,
 } from "./state";
-import { fireChain, shape, siblingsOf, updateChimes } from "./patch";
+import { connNote, fireChain, shape, siblingsOf, updateChimes } from "./patch";
 import { sampleSession, tickRawRec } from "./recording";
 
 function sampleSparks(): void {
@@ -40,7 +40,7 @@ function updateInstruments(now: number): void {
   for (const inst of INSTRUMENTS) {
     const conn = connections[inst.key];
     const v = shape(conn, inst.key);
-    if (inst.key !== "chimes") audio.setVoice(inst.key, v);
+    if (inst.key !== "chimes") audio.setVoice(inst.key, v, connNote(conn));
     else updateChimes(conn, v, now);
   }
 }
@@ -70,11 +70,15 @@ export function startLoop(): void {
     live.rollRaw = snap.rollRaw;
     live.rollSpeed = snap.rollSpeed;
     live.motion = snap.motion;
-    live.tapEnv *= 0.88; // decay the tap envelope each frame
-
-    // Gesture + per-instrument trigger envelopes decay each frame.
-    for (const id in gestureEnv) gestureEnv[id] *= 0.85;
-    for (const k in seqEnv) seqEnv[k] *= 0.85;
+    // Envelope decay, dt-corrected so tails last the same wall-clock time on
+    // 120/144 Hz displays as on 60 Hz (factors match the old per-frame values
+    // at exactly 60 fps).
+    const frames60 = snap.dt * 60;
+    const tapDecay = Math.pow(0.88, frames60);
+    const trigDecay = Math.pow(0.85, frames60);
+    live.tapEnv *= tapDecay;
+    for (const id in gestureEnv) gestureEnv[id] *= trigDecay;
+    for (const k in seqEnv) seqEnv[k] *= trigDecay;
     // Release any staggered steps of a movement's chain that are now due.
     for (let i = seqQueue.length - 1; i >= 0; i--) {
       if (now >= seqQueue[i].at) {

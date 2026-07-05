@@ -23,6 +23,10 @@ const INST_W = 132;
 const SRC_H = 46;
 const INST_H = 34;
 const GPAD = 16;
+// Minimum per-row slots: below these the rack grows past the viewport and
+// scrolls vertically instead of squeezing rows into unreadability.
+const MIN_SRC_SLOT = SRC_H + 10;
+const MIN_INST_SLOT = 24;
 
 export function PatchBay() {
   const view = patchViewSig.value;
@@ -73,6 +77,12 @@ interface LinkState {
   downX: number;
   downY: number;
   temp: SVGPathElement;
+  // The exact handler identities attached by startLink, so clearLink removes
+  // what was really added — a clearLink captured by an older render would
+  // otherwise remove that render's (never-attached) functions and leak one
+  // window pointermove listener per cancelled link.
+  move: (e: PointerEvent) => void;
+  up: (e: PointerEvent) => void;
 }
 
 function RackGraph() {
@@ -83,6 +93,7 @@ function RackGraph() {
   const sparkRefs = useRef(new Map<string, HTMLCanvasElement>());
   const valRefs = useRef(new Map<string, HTMLElement>());
   const cables = useRef(new Map<string, { line: SVGPathElement; hit: SVGPathElement }>());
+  const noteCables = useRef(new Map<string, SVGPathElement>()); // instKey -> dashed note-input cable
   const link = useRef<LinkState | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
 
@@ -150,6 +161,24 @@ function RackGraph() {
         c.hit.remove();
         cables.current.delete(inst.key);
       }
+      // Optional second (note) input: a thin dashed cable, display-only — the
+      // hit-area/editor stays on the trigger cable.
+      const notePort = conn?.noteSource ? srcPorts.current.get(conn.noteSource) : undefined;
+      const instPort = instPorts.current.get(inst.key);
+      let nc = noteCables.current.get(inst.key);
+      if (conn && notePort && instPort) {
+        if (!nc) {
+          nc = document.createElementNS(SVGNS, "path");
+          nc.setAttribute("class", "cable-note");
+          svg.appendChild(nc);
+          noteCables.current.set(inst.key, nc);
+        }
+        nc.setAttribute("d", cablePath(portCenter(notePort), portCenter(instPort)));
+        nc.setAttribute("stroke", paramByKey(conn.noteSource!)?.color || "#8b90b8");
+      } else if (nc) {
+        nc.remove();
+        noteCables.current.delete(inst.key);
+      }
     }
     for (const p of paramsList()) {
       const bar = valRefs.current.get(p.key);
@@ -163,8 +192,8 @@ function RackGraph() {
   const clearLink = () => {
     const l = link.current;
     if (!l) return;
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onLinkPointerUp);
+    window.removeEventListener("pointermove", l.move);
+    window.removeEventListener("pointerup", l.up);
     document.querySelectorAll(".gport.is-target").forEach((n) => n.classList.remove("is-target"));
     l.fromPort.classList.remove("is-source");
     l.temp.remove();
@@ -182,8 +211,10 @@ function RackGraph() {
   };
 
   const localPoint = (e: PointerEvent) => {
-    const r = boxRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const el = boxRef.current!;
+    const r = el.getBoundingClientRect();
+    // Content coordinates: account for the rack's vertical scroll offset.
+    return { x: e.clientX - r.left + el.scrollLeft, y: e.clientY - r.top + el.scrollTop };
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -199,9 +230,9 @@ function RackGraph() {
   };
 
   const onLinkPointerUp = (e: PointerEvent) => {
-    window.removeEventListener("pointerup", onLinkPointerUp);
     const l = link.current;
     if (!l) return;
+    window.removeEventListener("pointerup", l.up);
     const over = document.elementFromPoint(e.clientX, e.clientY);
     const p = over && (over.closest(".gport") as HTMLElement | null);
     if (p && p.dataset.port !== l.fromType) {
@@ -225,7 +256,17 @@ function RackGraph() {
     temp.setAttribute("stroke-width", "2.5");
     svgRef.current!.appendChild(temp);
     port.classList.add("is-source");
-    link.current = { fromType, fromKey, mode: "drag", fromPort: port, downX: e.clientX, downY: e.clientY, temp };
+    link.current = {
+      fromType,
+      fromKey,
+      mode: "drag",
+      fromPort: port,
+      downX: e.clientX,
+      downY: e.clientY,
+      temp,
+      move: onPointerMove,
+      up: onLinkPointerUp,
+    };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onLinkPointerUp);
     onPointerMove(e); // draw the initial stub immediately
@@ -268,8 +309,15 @@ function RackGraph() {
   // ---- Layout ------------------------------------------------------------------
   const H = size.h || 0;
   const W = size.w || 0;
-  const srcSlot = params.length ? (H - GPAD * 2) / params.length : 0;
-  const instSlot = (H - GPAD * 2) / INSTRUMENTS.length;
+  // Content height: the viewport, or taller when rows need their minimum slot
+  // (the .graph container scrolls vertically past that point).
+  const CH = Math.max(
+    H,
+    GPAD * 2 + params.length * MIN_SRC_SLOT,
+    GPAD * 2 + INSTRUMENTS.length * MIN_INST_SLOT
+  );
+  const srcSlot = params.length ? (CH - GPAD * 2) / params.length : 0;
+  const instSlot = (CH - GPAD * 2) / INSTRUMENTS.length;
   const ih = Math.max(18, Math.min(INST_H, instSlot - 4));
   const usedSrc = new Set(
     Object.values(connections)
@@ -281,8 +329,9 @@ function RackGraph() {
     <div class={`graph${hidden ? " graph--hidden" : ""}`} ref={boxRef} onPointerDown={onGraphPointerDown as any}>
       {/* Cable clicks bubble from the svg to the container handler. (The
           original attached the same handler to both, so a cable click ran it
-          twice — see docs/CONVERSION-NOTES.md.) */}
-      <svg class="graph-svg" ref={svgRef}></svg>
+          twice — see docs/CONVERSION-NOTES.md.) The svg spans the full
+          scrollable content height so cables reach every row. */}
+      <svg class="graph-svg" style={{ height: `${CH}px` }} ref={svgRef}></svg>
       {params.map((p, i) => (
         <div
           key={p.key}

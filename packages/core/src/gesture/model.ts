@@ -91,6 +91,8 @@ export interface Gesture {
   templates?: FeatureRow[][];
   /** Orientation-neutral invariant profiles — the primary match set. */
   invTemplates?: InvariantProfile[];
+  /** Each example's as-cropped arc (radians) — the arc gate's reference. */
+  exampleArcs?: number[];
   /** Invariant profiles of the counter-examples (the veto set). */
   invCounterTemplates?: InvariantProfile[];
   /** Leave-one-out fit per example (see looFits). */
@@ -199,14 +201,25 @@ export function bestTemplateDist(cand: FeatureRow[], templates: FeatureRow[][]):
   return best;
 }
 
-/** Distance of one invariant-profile candidate against one move. */
-export function invGestureDist(profile: FeatureRow[], g: Gesture): number {
+const bestInvDist = (profile: FeatureRow[], templates: InvariantProfile[]): number => {
   let best = Infinity;
-  for (const t of g.invTemplates || []) {
+  for (const t of templates) {
     const d = dtwDist(profile, t.profile);
     if (d < best) best = d;
   }
   return best;
+};
+
+/**
+ * Distance of one invariant-profile candidate against one move (best/min over
+ * the crop-variant templates of every example). Median-over-examples
+ * aggregation was prototyped as a false-positive reducer and measured
+ * end-to-end against the recordings in data/ — it shuffled errors around
+ * without beating this scoring once threshold auto-calibration adapted; see
+ * docs/IMPLEMENTATION-REVIEW.md before re-attempting.
+ */
+export function invGestureDist(profile: FeatureRow[], g: Gesture): number {
+  return bestInvDist(profile, g.invTemplates || []);
 }
 
 /**
@@ -230,22 +243,18 @@ export function axisGestureDist(norm: FeatureRow[], g: Gesture): number {
 
 /**
  * Leave-one-out fit per example: how far each real capture lands from the
- * templates built from the OTHER examples — exactly how a live performance is
- * scored. Powers threshold auto-calibration and the per-example badges in the
- * editor. Null when there are fewer than two examples.
+ * templates built from the OTHER examples. Powers threshold auto-calibration
+ * and the per-example badges in the editor. Null when there are fewer than
+ * two examples.
  */
 export function looFits(exs: GestureExample[]): (number | null)[] | null {
   if (exs.length < 2) return null;
   return exs.map((ex, i) => {
     const a = ex.raw.slice(ex.crop.start, ex.crop.end + 1);
     const probe = invariantProfile(a.length >= 2 ? a : ex.raw).profile;
-    const others = buildInvTemplates(exs.filter((_, j) => j !== i));
-    let best = Infinity;
-    for (const t of others) {
-      const d = dtwDist(probe, t.profile);
-      if (d < best) best = d;
-    }
-    return Number.isFinite(best) ? best : null;
+    const others = exs.filter((_, j) => j !== i);
+    const fit = bestInvDist(probe, buildInvTemplates(others));
+    return Number.isFinite(fit) ? fit : null;
   });
 }
 
@@ -272,6 +281,10 @@ export function refreshGestureTemplates(g: Gesture): void {
   g.template = exs.length ? makeTemplate(exs[0].raw, exs[0].crop) : null;
   g.templates = buildTemplates(exs);
   g.invTemplates = buildInvTemplates(exs);
+  g.exampleArcs = exs.map((ex) => {
+    const a = ex.raw.slice(ex.crop.start, ex.crop.end + 1);
+    return invariantProfile(a.length >= 2 ? a : ex.raw).arc;
+  });
   g.invCounterTemplates = g.counterExamples?.length ? buildInvTemplates(g.counterExamples) : [];
   g._exFit = looFits(exs);
   const auto = autoThreshold(g);
@@ -304,7 +317,10 @@ export function durationOk(g: Gesture, durMs: number): boolean {
  */
 export function arcOk(g: Gesture, arc: number): boolean {
   if (!Number.isFinite(arc)) return true;
-  const arcs = (g.invTemplates || []).map((t) => t.arc).filter((a) => a > 0);
+  // Gate against the examples' own as-cropped arcs. The crop-variant template
+  // arcs (tighter crops shrink the arc, looser ones grow it) inflated an
+  // already-loose ±GEST_ARC_RATIO band well past the real example spread.
+  const arcs = (g.exampleArcs?.length ? g.exampleArcs : (g.invTemplates || []).map((t) => t.arc)).filter((a) => a > 0);
   if (!arcs.length) return true;
   return arc >= Math.min(...arcs) / GEST_ARC_RATIO && arc <= Math.max(...arcs) * GEST_ARC_RATIO;
 }

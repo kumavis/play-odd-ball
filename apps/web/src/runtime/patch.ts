@@ -76,6 +76,17 @@ export function fireChain(source: string, gap: number): void {
   });
 }
 
+/** The 0..1 note position for a pitched instrument's next event: its optional
+ * second (note) input when patched, else undefined (voice picks its own). */
+export function connNote(conn: Conn | null): number | undefined {
+  return conn?.noteSource ? clamp1(paramValue(conn.noteSource)) : undefined;
+}
+
+/** Chime pitch: the note input when patched, else the classic Orient X follow. */
+export function chimePitch(conn: Conn | null): number {
+  return connNote(conn) ?? (engine.cc[3] ?? 64) / 127;
+}
+
 export function shape(conn: Conn | null, instKey?: string): number {
   if (!conn) return 0;
   // Sequenced instruments read their own (possibly delayed) trigger envelope so
@@ -90,6 +101,8 @@ export function shape(conn: Conn | null, instKey?: string): number {
 export function connect(srcKey: string, instKey: string): void {
   const prev = connections[instKey];
   const conn = mkConn(srcKey, prev?.atten ?? 1, prev?.thresh ?? 0);
+  // Rewiring the trigger keeps the instrument's note routing.
+  if (prev?.noteSource) conn.noteSource = prev.noteSource;
   // New links join the end of their source's play chain; reconnecting the same
   // pair keeps its position.
   conn.order =
@@ -121,6 +134,12 @@ export function moveInSequence(instKey: string, dir: -1 | 1): void {
 
 export function disconnect(instKey: string): void {
   connections[instKey] = null;
+  // Drop this instrument's pending chain steps and trigger envelope so a
+  // step scheduled milliseconds ago can't fire into a rewired patch.
+  for (let i = seqQueue.length - 1; i >= 0; i--) {
+    if (seqQueue[i].instKey === instKey) seqQueue.splice(i, 1);
+  }
+  delete seqEnv[instKey];
   if (instKey === "chimes") audio.chimesOn = false;
   if (connEditorSig.peek()?.instKey === instKey) connEditorSig.value = null;
   touchConnections();
@@ -185,7 +204,7 @@ export function updateChimes(conn: Conn | null, v: number, now: number): void {
   if (!chimeDirect(conn)) {
     if (chimeState.prev < SEQ_ONSET_LO && v >= SEQ_ONSET_HI && now - chimeState.last > SEQ_ONSET_COOLDOWN) {
       chimeState.last = now;
-      audio.hit(Math.round(clamp1(v) * 127), (engine.cc[3] ?? 64) / 127);
+      audio.hit(Math.round(clamp1(v) * 127), chimePitch(conn));
     }
   }
   chimeState.prev = v;
@@ -216,7 +235,15 @@ export async function previewInstrument(key: string): Promise<void> {
 /** Ensure a source that no longer exists (deleted gesture) is unpatched. */
 export function dropConnectionsFor(sourceKey: string): void {
   for (const instKey in connections) {
-    if (connections[instKey] && connections[instKey]!.source === sourceKey) disconnect(instKey);
+    const c = connections[instKey];
+    if (!c) continue;
+    if (c.source === sourceKey) {
+      disconnect(instKey);
+    } else if (c.noteSource === sourceKey) {
+      delete c.noteSource;
+      touchConnections();
+      saveStateSoon();
+    }
   }
 }
 

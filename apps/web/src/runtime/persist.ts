@@ -127,6 +127,10 @@ export function applyConnections(saved: Record<string, any> | undefined): void {
         typeof c.thresh === "number" ? clamp1(c.thresh) : 0
       );
       if (typeof c.order === "number") connections[instKey]!.order = c.order;
+      // The optional note input only survives if its source still exists.
+      if (typeof c.noteSource === "string" && paramByKey(c.noteSource)) {
+        connections[instKey]!.noteSource = c.noteSource;
+      }
     } else if (c === null) {
       connections[instKey] = null;
     }

@@ -1,6 +1,7 @@
 import {
   GEST_ACT_TAU,
   GEST_ATTEMPTS_MAX,
+  GEST_COUNTER_MARGIN,
   GEST_MARGIN,
   GEST_N,
   HIST_MS,
@@ -264,11 +265,11 @@ export class GestureRecognizer {
       if (d > g.threshold) continue;
       // Counter-example veto: the candidate resembles a capture the user
       // explicitly marked as NOT this move (nearly) as much as it resembles
-      // the move's own examples. The GEST_MARGIN bias is deliberate: between
+      // the move's own examples. The margin bias is deliberate: between
       // "the move" and "explicitly not the move", a near-tie must not fire —
       // honest reps of the counter motion vary run to run, and a knife-edge
       // rule would let half of them through.
-      if (dCounter <= d + GEST_MARGIN) continue;
+      if (dCounter <= d + GEST_COUNTER_MARGIN) continue;
       if (!best || d < best.d) {
         second = best;
         best = { g, d };
@@ -295,7 +296,7 @@ export class GestureRecognizer {
       }
     }
     for (const ev of evals) {
-      const vetoed = ev.dCounter <= ev.d + GEST_MARGIN && ev.d <= ev.g.threshold;
+      const vetoed = ev.dCounter <= ev.d + GEST_COUNTER_MARGIN && ev.d <= ev.g.threshold;
       const outcome: AttemptOutcome = !ev.durOkay
         ? "gate-duration"
         : !ev.arcOkay

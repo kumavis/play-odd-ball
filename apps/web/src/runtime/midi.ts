@@ -13,7 +13,7 @@ import {
   logEvent,
   statusSig,
 } from "./state";
-import { chimeDirect } from "./patch";
+import { chimeDirect, chimePitch } from "./patch";
 import { rawRecPush } from "./recording";
 
 export interface PortOption {
@@ -50,7 +50,7 @@ export function onMidiMessage(deviceId: string, data: MidiBytes): void {
     // Pitch follows X orientation (CC3) so moving the ball plays different
     // notes. Only the direct tap→chimes patch fires from here; other sources
     // trigger chimes from their own value edges in the frame loop.
-    if (res.isTap && chimeDirect(connections.chimes)) audio.hit(ev.velocity, (engine.cc[3] ?? 64) / 127);
+    if (res.isTap && chimeDirect(connections.chimes)) audio.hit(ev.velocity, chimePitch(connections.chimes));
     logEvent("NOTE", `${noteName(ev.note)} (${ev.note}) vel ${ev.velocity}${res.noteGesture ? ` · ${res.noteGesture}` : ""}`, "note");
   } else if (ev.kind === "pitchBend") {
     logEvent("PITCH", String(ev.value));
@@ -159,10 +159,15 @@ export async function connectBluetoothBall(): Promise<void> {
     hintSig.value = { kind: "bt-failed", detail: String(err) };
     return;
   }
-  if (bleInputs.some((p) => p.id === ball.id)) {
-    // Already paired (double click): the fresh GATT session replaces the old
-    // one; just refresh status.
+  const existing = bleInputs.findIndex((p) => p.id === ball.id);
+  if (existing !== -1) {
+    // Already paired (double click): connectBleBall swapped its listeners
+    // onto the same live session, so keep the fresh handle — the old one
+    // would still disconnect the shared GATT session, but only the new one
+    // matches the listeners now attached.
+    bleInputs[existing] = ball;
     syncActiveInputs();
+    logEvent("", `Bluetooth ball ${ball.name} already connected`);
     return;
   }
   bleInputs.push(ball);
