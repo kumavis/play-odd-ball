@@ -75,6 +75,26 @@ class Orbit {
     armed: boolean;
   } | null = null;
   built = false;
+  /** View transform: screen = world × s + (x, y). Wheel zooms, dragging the
+   * background pans, double-clicking empty space resets. */
+  view = { s: 1, x: 0, y: 0 };
+  /** In-progress background pan (screen-space last pointer position). */
+  pan: { lastX: number; lastY: number } | null = null;
+
+  zoomAt(clientX: number, clientY: number, factor: number): void {
+    const r = this.canvas.getBoundingClientRect();
+    const sx = clientX - r.left;
+    const sy = clientY - r.top;
+    const s = Math.max(0.35, Math.min(3.5, this.view.s * factor));
+    // Keep the world point under the cursor fixed while the scale changes.
+    this.view.x = sx - ((sx - this.view.x) / this.view.s) * s;
+    this.view.y = sy - ((sy - this.view.y) / this.view.s) * s;
+    this.view.s = s;
+  }
+
+  resetView(): void {
+    this.view = { s: 1, x: 0, y: 0 };
+  }
 
   constructor(readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -428,7 +448,15 @@ class Orbit {
   draw(): void {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.w, this.h);
+    ctx.save();
+    ctx.translate(this.view.x, this.view.y);
+    ctx.scale(this.view.s, this.view.s);
+    this.drawWorld();
+    ctx.restore();
+  }
 
+  private drawWorld(): void {
+    const ctx = this.ctx;
     // faint orbital guide ring
     const R = Math.max(120, Math.min(this.w, this.h));
     ctx.beginPath();
@@ -479,9 +507,13 @@ class Orbit {
   }
 
   // ---- pointer interaction ----
+  /** Pointer position in WORLD coordinates (the view transform inverted). */
   point(e: PointerEvent) {
     const r = this.canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    return {
+      x: (e.clientX - r.left - this.view.x) / this.view.s,
+      y: (e.clientY - r.top - this.view.y) / this.view.s,
+    };
   }
 
   hitInst(x: number, y: number): OrbNode | null {
@@ -555,6 +587,14 @@ export function OrbitView() {
     (window as any).__oddballOrbit = orbit;
 
     const onMove = (e: PointerEvent) => {
+      if (orbit.pan) {
+        // Pan in screen space — the view offset is a screen-space quantity.
+        orbit.view.x += e.clientX - orbit.pan.lastX;
+        orbit.view.y += e.clientY - orbit.pan.lastY;
+        orbit.pan.lastX = e.clientX;
+        orbit.pan.lastY = e.clientY;
+        return;
+      }
       const p = orbit.point(e);
       if (orbit.link) {
         orbit.link.x = p.x;
@@ -578,6 +618,12 @@ export function OrbitView() {
     };
     const onUp = (e: PointerEvent) => {
       window.removeEventListener("pointerup", onUp);
+      if (orbit.pan) {
+        orbit.pan = null;
+        cv.style.cursor = "";
+        window.removeEventListener("pointermove", onMove);
+        return;
+      }
       const p = orbit.point(e);
       if (orbit.link && !orbit.link.armed) {
         const inst = orbit.hitInst(p.x, p.y);
@@ -645,7 +691,24 @@ export function OrbitView() {
         // close-on-outside-click handler recognizes; canvas cable hits need
         // the same treatment or the editor closes the instant it opens.
         e.stopPropagation();
+        return;
       }
+      // 4. empty background → pan the view.
+      orbit.pan = { lastX: e.clientX, lastY: e.clientY };
+      cv.style.cursor = "grabbing";
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    };
+    // Wheel zooms around the cursor; double-clicking empty space resets.
+    const onWheel = (e: WheelEvent) => {
+      if (patchViewSig.peek() !== "orbit") return;
+      e.preventDefault();
+      orbit.zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0015));
+    };
+    const onDblClick = (e: MouseEvent) => {
+      if (patchViewSig.peek() !== "orbit") return;
+      const p = orbit.point(e as unknown as PointerEvent);
+      if (!orbit.topNode(p.x, p.y) && !orbit.cableAt(p.x, p.y)) orbit.resetView();
     };
     // Escape — or a click anywhere off the orbit — cancels an armed link.
     const onKey = (e: KeyboardEvent) => {
@@ -655,10 +718,14 @@ export function OrbitView() {
       if (orbit.link?.armed && !(e.target as HTMLElement).closest(".orbit")) clearLink();
     };
     cv.addEventListener("pointerdown", onDown);
+    cv.addEventListener("wheel", onWheel, { passive: false });
+    cv.addEventListener("dblclick", onDblClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onWindowDown);
     return () => {
       cv.removeEventListener("pointerdown", onDown);
+      cv.removeEventListener("wheel", onWheel);
+      cv.removeEventListener("dblclick", onDblClick);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("pointerdown", onWindowDown);
       window.removeEventListener("pointermove", onMove);
@@ -681,7 +748,7 @@ export function OrbitView() {
       <canvas class="orbit-canvas" ref={canvasRef}></canvas>
       <div class="orbit-hint">
         click or drag a signal's halo dot onto a triangle to patch it · click a cable to edit / disconnect · drag
-        nodes to rearrange
+        nodes to rearrange · scroll to zoom · drag the background to pan · double-click to reset
       </div>
     </div>
   );

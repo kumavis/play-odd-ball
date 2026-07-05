@@ -182,11 +182,14 @@ body { display: flex; flex-direction: column; height: 100vh; }
   background: #0c0e1a;
   border: 1px solid var(--line);
   border-radius: 14px;
-  overflow: hidden;
+  /* Rows get a minimum height and the rack scrolls vertically when the
+     sources/instruments don't fit (touch: vertical pan stays native). */
+  overflow-y: auto;
+  overflow-x: hidden;
   user-select: none;
-  touch-action: none;
+  touch-action: pan-y;
 }
-.graph-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.graph-svg { position: absolute; inset: 0 auto auto 0; width: 100%; height: 100%; pointer-events: none; }
 .graph-svg .cable { pointer-events: stroke; cursor: pointer; fill: none; }
 .graph-svg .cable-hit { pointer-events: stroke; cursor: pointer; fill: none; stroke: transparent; stroke-width: 16; }
 .graph-svg .cable.is-selected { stroke-dasharray: none; filter: drop-shadow(0 0 6px currentColor); }
@@ -202,6 +205,8 @@ body { display: flex; flex-direction: column; height: 100vh; }
   border-radius: 8px;
   font-size: 11px; color: var(--text);
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  /* Gestures starting on a node (port drags) must not pan-scroll the rack. */
+  touch-action: none;
 }
 .gnode--src {
   justify-content: flex-start; gap: 8px;

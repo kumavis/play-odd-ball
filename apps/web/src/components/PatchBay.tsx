@@ -23,6 +23,10 @@ const INST_W = 132;
 const SRC_H = 46;
 const INST_H = 34;
 const GPAD = 16;
+// Minimum per-row slots: below these the rack grows past the viewport and
+// scrolls vertically instead of squeezing rows into unreadability.
+const MIN_SRC_SLOT = SRC_H + 10;
+const MIN_INST_SLOT = 24;
 
 export function PatchBay() {
   const view = patchViewSig.value;
@@ -207,8 +211,10 @@ function RackGraph() {
   };
 
   const localPoint = (e: PointerEvent) => {
-    const r = boxRef.current!.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const el = boxRef.current!;
+    const r = el.getBoundingClientRect();
+    // Content coordinates: account for the rack's vertical scroll offset.
+    return { x: e.clientX - r.left + el.scrollLeft, y: e.clientY - r.top + el.scrollTop };
   };
 
   const onPointerMove = (e: PointerEvent) => {
@@ -303,8 +309,15 @@ function RackGraph() {
   // ---- Layout ------------------------------------------------------------------
   const H = size.h || 0;
   const W = size.w || 0;
-  const srcSlot = params.length ? (H - GPAD * 2) / params.length : 0;
-  const instSlot = (H - GPAD * 2) / INSTRUMENTS.length;
+  // Content height: the viewport, or taller when rows need their minimum slot
+  // (the .graph container scrolls vertically past that point).
+  const CH = Math.max(
+    H,
+    GPAD * 2 + params.length * MIN_SRC_SLOT,
+    GPAD * 2 + INSTRUMENTS.length * MIN_INST_SLOT
+  );
+  const srcSlot = params.length ? (CH - GPAD * 2) / params.length : 0;
+  const instSlot = (CH - GPAD * 2) / INSTRUMENTS.length;
   const ih = Math.max(18, Math.min(INST_H, instSlot - 4));
   const usedSrc = new Set(
     Object.values(connections)
@@ -316,8 +329,9 @@ function RackGraph() {
     <div class={`graph${hidden ? " graph--hidden" : ""}`} ref={boxRef} onPointerDown={onGraphPointerDown as any}>
       {/* Cable clicks bubble from the svg to the container handler. (The
           original attached the same handler to both, so a cable click ran it
-          twice — see docs/CONVERSION-NOTES.md.) */}
-      <svg class="graph-svg" ref={svgRef}></svg>
+          twice — see docs/CONVERSION-NOTES.md.) The svg spans the full
+          scrollable content height so cables reach every row. */}
+      <svg class="graph-svg" style={{ height: `${CH}px` }} ref={svgRef}></svg>
       {params.map((p, i) => (
         <div
           key={p.key}
