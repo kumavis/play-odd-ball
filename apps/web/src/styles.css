@@ -17,27 +17,41 @@
 
 html, body {
   margin: 0;
-  height: 100%;
   background: radial-gradient(1200px 800px at 70% -10%, #1a1d36 0%, var(--bg) 55%) fixed;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
 }
 
-body { display: flex; flex-direction: column; height: 100vh; }
+/* The page scrolls vertically when the window is too short for the layout
+ * (the workspace keeps a usable minimum height instead of being crushed);
+ * on tall windows the column still fills the viewport exactly. */
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+@supports (min-height: 100dvh) {
+  body { min-height: 100dvh; }
+}
 /* The Preact app mounts inside #root, so it must forward the body's flex
  * column to the header/main children the layout was written for. */
 #root { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 
 .topbar {
   flex: 0 0 auto;
+  /* Keep the controls reachable while the page scrolls. */
+  position: sticky;
+  top: 0;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 12px 20px;
   border-bottom: 1px solid var(--line);
+  background: rgba(10, 11, 20, 0.82);
   backdrop-filter: blur(6px);
 }
 
@@ -116,7 +130,7 @@ body { display: flex; flex-direction: column; height: 100vh; }
 }
 
 /* ---- Workspace: patch bay fills everything ---- */
-.workspace { flex: 1 1 auto; position: relative; min-height: 0; }
+.workspace { flex: 1 1 auto; position: relative; min-height: 480px; }
 
 .patchbay {
   position: absolute; inset: 0;
