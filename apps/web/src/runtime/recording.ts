@@ -1,7 +1,7 @@
 // Session recording (~20 Hz value snapshots) and high-fidelity raw capture
 // (every non-realtime MIDI message), both downloadable as JSON.
 import type { MidiBytes } from "@oddball/core";
-import { logEvent, paramsList, paramValue, recRawSig, recSessionSig } from "./state";
+import { bleDiag, logEvent, paramsList, recRawSig, recSessionSig } from "./state";
 
 const download = (payload: unknown, name: string, pretty: boolean) => {
   const blob = new Blob([JSON.stringify(payload, undefined, pretty ? 2 : undefined)], {
@@ -113,6 +113,22 @@ function stopRawRec(): void {
       "Every non-realtime MIDI message in arrival order. t = ms from start; " +
       "status/d1/d2 are the raw MIDI bytes (0x90 note-on, 0xB0 control-change, …).",
     messages: rec.msgs,
+    // Direct-BLE diagnostics: decoded counts by kind + the last raw
+    // (pre-decode) packets, so a capture from a phone can show whether the
+    // ball ever SENT motion CCs or only sparse events.
+    ...(bleDiag.packets
+      ? {
+          ble: {
+            packets: bleDiag.packets,
+            bytes: bleDiag.bytes,
+            notes: bleDiag.notes,
+            ccs: bleDiag.ccs,
+            realtime: bleDiag.realtime,
+            other: bleDiag.other,
+            lastPackets: bleDiag.lastPackets.slice(),
+          },
+        }
+      : {}),
   };
   download(payload, `oddball-raw-${new Date().toISOString().replace(/[:.]/g, "-")}.json`, false);
   const rate = Math.round(rec.msgs.length / (durationMs / 1000));

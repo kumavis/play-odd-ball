@@ -67,6 +67,20 @@ export const live = {
   tapEnv: 0, // decaying envelope that jumps to the tap velocity on each note
 };
 
+/** Diagnostics for the direct Web Bluetooth link: decoded-message counts by
+ * kind plus a ring of raw (pre-decode) packet bytes — the ground truth of
+ * what the ball actually sent. Surfaced in the log, on __oddball, and
+ * embedded in raw captures so a phone recording can be debugged offline. */
+export const bleDiag = {
+  packets: 0,
+  bytes: 0,
+  notes: 0,
+  ccs: 0,
+  realtime: 0,
+  other: 0,
+  lastPackets: [] as { t: number; hex: string }[],
+};
+
 export const gestureEnv: Record<string, number> = {}; // gesture id -> 0..1 trigger envelope
 export const seqEnv: Record<string, number> = {}; // instKey -> 0..1 per-instrument trigger
 export const seqQueue: { instKey: string; at: number }[] = []; // pending chain steps

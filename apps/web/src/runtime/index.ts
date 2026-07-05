@@ -1,5 +1,5 @@
 // App bootstrap: restore persisted state, wire events, start the loops.
-import { audio, connections, engine, histOpenSig, patchViewSig, viewsSig } from "./state";
+import { audio, bleDiag, connections, engine, histOpenSig, patchViewSig, viewsSig } from "./state";
 import { applySavedState, doneLoading, loadState, saveState } from "./persist";
 import { loadGestures, wireRecognizerEvents } from "./gestures";
 import { loadProfiles } from "./profiles";
@@ -39,6 +39,7 @@ export async function initRuntime(): Promise<void> {
   (window as any).__oddball = {
     engine,
     connections,
+    bleDiag,
     feed: (deviceId: string, data: number[]) => onMidiMessage(deviceId, data),
   };
 

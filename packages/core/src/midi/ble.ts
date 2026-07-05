@@ -51,6 +51,10 @@ export interface BleBall {
 export interface ConnectBleBallOptions {
   /** Called for each decoded MIDI message, tagged with the ball's id/name. */
   onMessage: (data: number[], ball: { id: string; name: string }) => void;
+  /** Called with every raw BLE-MIDI packet BEFORE decoding — diagnostics for
+   * streams where messages seem to go missing (the bytes are the ground
+   * truth of what the ball actually sent). */
+  onPacket?: (bytes: Uint8Array, ball: { id: string; name: string }) => void;
   /** Called when the GATT connection drops (including via disconnect()). */
   onDisconnect?: (ball: { id: string; name: string }) => void;
   /** Extra device-name prefix to include in the chooser (default "ODD"). */
@@ -124,11 +128,23 @@ export async function connectBleBall(opts: ConnectBleBallOptions): Promise<BleBa
     const server = await device.gatt!.connect();
     const service = await server.getPrimaryService(BLE_MIDI_SERVICE);
     const char = await service.getCharacteristic(BLE_MIDI_CHARACTERISTIC);
+    // The BLE-MIDI spec requires the central to READ the MIDI I/O
+    // characteristic once after connecting (CoreMIDI does), and some
+    // firmwares gate their continuous CC stream on that handshake — without
+    // it a ball can pair, deliver sparse note events, and never stream
+    // motion. Failure is non-fatal: some stacks reject reads on notify-only
+    // characteristics.
+    try {
+      await char.readValue();
+    } catch {
+      /* optional handshake */
+    }
     swapListener(char, "characteristicvaluechanged", charListeners, (ev) => {
       // The characteristic value is a DataView that need not span its whole
       // ArrayBuffer — honor its offset/length or the packet bytes are wrong.
       const v = (ev.target as BluetoothRemoteGATTCharacteristic).value!;
       const bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+      opts.onPacket?.(bytes, identity);
       for (const msg of decodeBleMidi(bytes)) opts.onMessage(msg, identity);
     });
     swapListener(device, "gattserverdisconnected", deviceListeners, () => opts.onDisconnect?.(identity));

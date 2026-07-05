@@ -4,6 +4,7 @@ import { signal } from "@preact/signals";
 import { BleConnectError, connectBleBall, noteName, type BleBall, type MidiBytes } from "@oddball/core";
 import {
   audio,
+  bleDiag,
   connections,
   emitAppEvent,
   engine,
@@ -140,14 +141,49 @@ export async function initMidi(): Promise<void> {
 }
 
 // ---- Bluetooth (BLE-MIDI) direct pairing --------------------------------------
+
+// Periodic BLE stats in the log — the quickest way to see ON THE PHONE
+// whether the ball is actually streaming CCs or only sending sparse notes.
+let bleDiagTimer: ReturnType<typeof setInterval> | undefined;
+let bleDiagLast = "";
+function startBleDiagLog(): void {
+  if (bleDiagTimer) return;
+  bleDiagTimer = setInterval(() => {
+    if (!bleInputs.length) return;
+    const line = `pkts ${bleDiag.packets} · notes ${bleDiag.notes} · CC ${bleDiag.ccs} · rt ${bleDiag.realtime} · other ${bleDiag.other}`;
+    if (line !== bleDiagLast) {
+      bleDiagLast = line;
+      logEvent("BLE", line);
+    }
+  }, 5000);
+}
+
 export async function connectBluetoothBall(): Promise<void> {
   let ball: BleBall;
   try {
     statusSig.value = { on: false, label: "connecting…" };
     ball = await connectBleBall({
-      onMessage: (msg, from) => onMidiMessage(from.id, msg),
+      onPacket: (bytes) => {
+        bleDiag.packets++;
+        bleDiag.bytes += bytes.length;
+        bleDiag.lastPackets.push({
+          t: Math.round(performance.now()),
+          hex: Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" "),
+        });
+        if (bleDiag.lastPackets.length > 64) bleDiag.lastPackets.shift();
+      },
+      onMessage: (msg, from) => {
+        const status = msg[0] ?? 0;
+        const type = status & 0xf0;
+        if (status >= 0xf8) bleDiag.realtime++;
+        else if (type === 0x90 || type === 0x80) bleDiag.notes++;
+        else if (type === 0xb0) bleDiag.ccs++;
+        else bleDiag.other++;
+        onMidiMessage(from.id, msg);
+      },
       onDisconnect: (from) => removeBleInput(from.id),
     });
+    startBleDiagLog();
   } catch (err) {
     syncActiveInputs();
     if (err instanceof BleConnectError) {
