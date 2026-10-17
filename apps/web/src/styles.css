@@ -15,6 +15,10 @@
 
 * { box-sizing: border-box; }
 
+/* Touch: no double-tap-zoom delay on controls, no grey tap flash. */
+button, select, input, label { touch-action: manipulation; }
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
 html, body {
   margin: 0;
   background: radial-gradient(1200px 800px at 70% -10%, #1a1d36 0%, var(--bg) 55%) fixed;
@@ -50,12 +54,18 @@ body {
   justify-content: space-between;
   gap: 16px;
   padding: 12px 20px;
+  /* Notched phones (viewport-fit=cover): stay clear of the camera / corners. */
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
   border-bottom: 1px solid var(--line);
   background: rgba(10, 11, 20, 0.82);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
-.brand { display: flex; align-items: center; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; white-space: nowrap; }
+.link-state { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .brand-dot {
   width: 14px; height: 14px; border-radius: 50%;
   background: radial-gradient(circle at 30% 30%, #fff, var(--accent-2) 40%, var(--accent) 100%);
@@ -64,7 +74,34 @@ body {
 .brand h1 { font-size: 18px; font-weight: 700; margin: 0; letter-spacing: 0.3px; }
 .brand h1 span { color: var(--muted); font-weight: 500; }
 
-.controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; flex: 1 1 auto; }
+.lbl-short { display: none; }
+
+/* ---- Tempo (BPM) control ---- */
+.tempo {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 3px 4px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-2); color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+}
+.tempo button {
+  width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px;
+  background: transparent; color: var(--text); cursor: pointer; font-size: 16px; line-height: 1;
+}
+.tempo button:hover { background: #2a2e4e; }
+.tempo input {
+  width: 42px; padding: 4px 2px; border: 0; border-radius: 6px; outline: 0; background: transparent;
+  color: var(--text); font: 700 14px/1 ui-monospace, "SF Mono", Menlo, monospace; text-align: center;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.tempo input:focus { background: rgba(255,255,255,0.07); }
+.tempo input::-webkit-inner-spin-button, .tempo input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.tempo-unit { margin-right: 2px; }
+.tempo-dot {
+  width: 8px; height: 8px; margin: 0 4px 0 3px; border-radius: 50%;
+  background: var(--accent); opacity: 0.25; transition: opacity 0.06s linear;
+}
+.tempo-dot.is-on { opacity: 0.9; box-shadow: 0 0 8px var(--accent); }
+.tempo-dot.is-bar { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
 
 .views { display: inline-flex; gap: 6px; padding: 3px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; }
 .view-btn {
@@ -114,6 +151,8 @@ body {
   color: #061018; border-color: transparent;
   box-shadow: 0 0 18px rgba(0,229,255,0.4);
 }
+/* Sound wanted, but the browser hasn't let audio start yet (phones: needs a tap). */
+.sound-btn--on.is-waiting { animation: recpulse 1.2s ease-in-out infinite; }
 
 .status {
   font-size: 12px; font-weight: 600;
@@ -204,7 +243,10 @@ body {
   touch-action: pan-y;
 }
 .graph-svg { position: absolute; inset: 0 auto auto 0; width: 100%; height: 100%; pointer-events: none; }
-.graph-svg .cable { pointer-events: stroke; cursor: pointer; fill: none; }
+/* The visible line is click-through: its wider .cable-hit twin underneath
+   takes the click (a hit exactly on the thin line used to land on .cable,
+   which nothing listens for, so the editor didn't open). */
+.graph-svg .cable { pointer-events: none; fill: none; }
 .graph-svg .cable-hit { pointer-events: stroke; cursor: pointer; fill: none; stroke: transparent; stroke-width: 16; }
 .graph-svg .cable.is-selected { stroke-dasharray: none; filter: drop-shadow(0 0 6px currentColor); }
 .graph-svg .cable-temp { pointer-events: none; fill: none; stroke-dasharray: 5 4; }
@@ -219,8 +261,9 @@ body {
   border-radius: 8px;
   font-size: 11px; color: var(--text);
   box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  /* Gestures starting on a node (port drags) must not pan-scroll the rack. */
-  touch-action: none;
+  /* A swipe on a node body scrolls the rack (on a phone the nodes cover most
+     of it); only the ports, below, claim the gesture for cable drags. */
+  touch-action: pan-y;
 }
 .gnode--src {
   justify-content: flex-start; gap: 8px;
@@ -252,6 +295,25 @@ body {
   box-shadow: 0 0 8px var(--accent-2);
 }
 .gnode .glabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Instrument group headers (click to fold / unfold). */
+.ggroup {
+  position: absolute;
+  display: flex; align-items: center; gap: 5px;
+  padding: 0 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px;
+  text-align: left; white-space: nowrap; overflow: hidden;
+  touch-action: manipulation;
+}
+.ggroup:hover { color: var(--text); }
+.ggroup-caret { flex: 0 0 auto; width: 9px; color: var(--accent-2); }
+.ggroup-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.ggroup-count {
+  flex: 0 0 auto; padding: 1px 5px; border-radius: 999px;
+  background: var(--panel-2); color: var(--text); letter-spacing: 0;
+}
+.ggroup.is-collapsed { opacity: 0.8; }
 .gnode .gval {
   position: absolute; left: 0; bottom: 0; height: 3px; border-radius: 0 0 8px 8px;
   background: var(--accent-2); width: 0%;
@@ -262,6 +324,8 @@ body {
   width: 14px; height: 14px; border-radius: 50%;
   background: var(--panel); border: 2px solid var(--muted);
   cursor: crosshair; transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  /* Gestures starting on a port (cable drags) must not pan-scroll the rack. */
+  touch-action: none;
 }
 .gport--out { right: -8px; }
 .gport--in { left: -8px; }
@@ -673,6 +737,12 @@ body {
   background: radial-gradient(circle at 35% 35%, #fff, var(--accent-2) 45%, var(--accent) 100%);
   box-shadow: 0 0 8px rgba(0,229,255,0.6); cursor: pointer;
 }
+.ce-row select {
+  width: 100%; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  font: inherit; font-size: 12px; outline: none;
+}
+.ce-row select:focus { border-color: var(--accent-2); }
 .ce-meter {
   position: relative; height: 10px; border-radius: 999px; margin-bottom: 12px;
   background: var(--panel-2); border: 1px solid var(--line); overflow: hidden;
@@ -718,13 +788,22 @@ body {
 .ce-disconnect:hover { background: #3a1c28; }
 
 .hint {
-  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
   background: var(--panel-2); border: 1px solid var(--line);
-  padding: 10px 16px; border-radius: 12px; font-size: 13px; color: var(--muted);
-  max-width: 640px; text-align: center; z-index: 40;
+  padding: 10px 34px 10px 16px; border-radius: 12px; font-size: 13px; color: var(--muted);
+  width: max-content; max-width: min(640px, calc(100vw - 24px)); text-align: center; z-index: 40;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
 }
+.hint p { margin: 0; }
 .hint code { color: var(--accent-2); }
 .hint.hide { display: none; }
+.hint-close {
+  position: absolute; top: 6px; right: 6px;
+  width: 24px; height: 24px; padding: 0; border-radius: 7px; cursor: pointer;
+  background: transparent; color: var(--muted); border: 1px solid transparent;
+  font-size: 16px; line-height: 1;
+}
+.hint-close:hover { color: var(--text); border-color: var(--line); }
 
 /* ---- Preact conversion additions: counter-examples + attempt selection ---- */
 .gedit-counters .gedit-ex-title { color: #ff8fa3; }
@@ -736,3 +815,127 @@ body {
 .gedit-mini--counter { margin-left: 8px; border-color: rgba(255,93,115,0.55); color: #ff8fa3; }
 .gedit-mini--counter:hover { border-color: #ff5d73; color: #ff5d73; }
 .gedit-attempt-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---- Gesture editor: never taller than the screen (landscape phones) ---- */
+.gedit { max-height: calc(100vh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+@supports (height: 100dvh) {
+  .gedit { max-height: calc(100dvh - 24px); }
+}
+
+/* Never taller than the screen; scrolls inside on short windows. */
+.conn-editor { max-height: calc(100vh - 24px); overflow-y: auto; overscroll-behavior: contain; }
+
+/* =========================================================================
+   Phones & narrow windows (the compact top bar also serves landscape phones)
+   ========================================================================= */
+@media (max-width: 760px), (max-height: 500px) {
+  .topbar {
+    flex-wrap: wrap; gap: 6px 10px;
+    padding: 8px 10px 6px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+  .brand { gap: 8px; }
+  .brand h1 { font-size: 16px; }
+  .brand h1 span { display: none; }
+  .link-state { margin-left: auto; gap: 6px; }
+  .status { padding: 4px 9px; font-size: 11px; }
+  .rate { min-width: 0; font-size: 11px; }
+  /* One swipeable row of controls instead of six wrapped ones; the fade on
+     the right edge says there's more. */
+  .controls {
+    flex: 1 0 100%; flex-wrap: nowrap; justify-content: flex-start; gap: 8px;
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+    margin: 0 -10px; padding: 2px 10px 4px;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+  .controls::-webkit-scrollbar { display: none; }
+  .controls > * { flex: 0 0 auto; }
+  .tool-btn .lbl { display: none; }
+  .tool-btn .lbl-short { display: inline; }
+  .tool-btn, .sound-btn { padding: 8px 11px; }
+  .view-btn { padding: 6px 9px; }
+  #portSelect { min-width: 0; max-width: 160px; padding: 8px; }
+}
+
+@media (max-width: 760px) {
+  .workspace { min-height: 420px; }
+  .patchbay {
+    padding: 10px 8px;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .patch-head { margin-bottom: 8px; }
+  .hint-inline { display: none; }
+  .hint { font-size: 12px; }
+
+  .hist-dock { margin-top: 8px; }
+  .hist-dock-head { flex-wrap: wrap; gap: 6px; }
+  .hist-legend { display: none; }
+  .hist-actions { margin-left: 0; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
+  .hist-actions::-webkit-scrollbar { display: none; }
+  .hist-canvas { height: 110px; }
+
+  .gesture { flex-wrap: wrap; gap: 6px 10px; }
+  .g-name { min-width: 0; flex: 1 1 auto; }
+  .g-sens-label { margin-left: 0; }
+  .g-sens { flex: 1 1 120px; width: auto; }
+
+  /* Side panels: full-width sheets over the patch bay. */
+  .drawer { left: 0; width: auto; max-width: none; padding: 8px; }
+  .orb-scene { width: 240px; height: 240px; }
+
+  /* Cable editor: a bottom sheet instead of a popover at the tap point. */
+  .conn-editor {
+    left: 8px !important; right: 8px; top: auto !important;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    width: auto; max-height: 72vh; overflow-y: auto; overscroll-behavior: contain;
+  }
+
+  .gedit { padding: 12px; gap: 10px; }
+  .gedit-row label { width: 96px; font-size: 12px; }
+  .gedit-crop, .gedit-examples, .gedit-live, .gedit-attempts-row { flex-wrap: wrap; }
+  .gedit-canvas { height: 150px; }
+}
+
+@media (max-width: 400px) {
+  .rate { display: none; }
+}
+
+/* Touch screens: finger-sized targets. The visuals stay small; the hit areas
+   grow (outward, so they don't swallow the neighbouring ▶ preview button). */
+@media (pointer: coarse) {
+  .gport { width: 16px; height: 16px; }
+  .gport--out { right: -9px; }
+  .gport--in { left: -9px; }
+  /* Taller more than wider: the gap between the columns must stay swipeable. */
+  .gport::after { content: ""; position: absolute; top: -12px; bottom: -12px; border-radius: 12px; }
+  .gport--out::after { left: -6px; right: -9px; }
+  .gport--in::after { left: -9px; right: -6px; }
+  /* The source port was half-clipped by its node; show (and hit) all of it. */
+  .gnode--src { overflow: visible; }
+  .gnode--src .spark { min-width: 0; }
+  .gnode--inst { padding-left: 16px; }
+  .gnode--inst .gtest { width: 26px; height: 26px; font-size: 9px; }
+  .ggroup { font-size: 10.5px; }
+  .ce-row input[type="range"] { height: 14px; }
+  .ce-row input[type="range"]::-webkit-slider-thumb { width: 26px; height: 26px; }
+  .ce-close, .side-close { width: 32px; height: 32px; font-size: 18px; }
+  .ce-mode-btn, .ce-seq-btn { padding: 10px 4px; }
+  .ce-row select { padding: 8px; font-size: 14px; }
+  .ce-disconnect { padding: 12px; }
+  .g-edit, .g-del { width: 32px; height: 32px; }
+  .gedit-close { padding: 4px 10px; }
+  .gedit-mini { padding: 8px 12px; }
+  .view-btn { padding-top: 8px; padding-bottom: 8px; }
+  .hint-close { width: 32px; height: 32px; top: 2px; right: 2px; }
+}
+
+/* Short landscape phones: let the top bar scroll away instead of pinning it. */
+@media (max-height: 500px) {
+  .topbar { position: static; }
+  .workspace { min-height: 360px; }
+}

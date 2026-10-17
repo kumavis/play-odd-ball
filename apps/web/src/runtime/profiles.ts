@@ -4,6 +4,7 @@
 import { serializeGestures } from "@oddball/core";
 import {
   audio,
+  bpmSig,
   connections,
   connEditorSig,
   editingGestureSig,
@@ -12,6 +13,7 @@ import {
   profilesSig,
   sensitivitySig,
   seqCfg,
+  setBpm,
   type Profile,
 } from "./state";
 import {
@@ -73,6 +75,7 @@ export function saveCurrentProfile(): string {
     seqCfg: JSON.parse(JSON.stringify(seqCfg)),
     gestures: serializeGestures(gesturesSig.peek()),
     sensitivity: sensitivitySig.peek(),
+    bpm: bpmSig.peek(),
   };
   profilesSig.value = [...profiles, p];
   writeProfiles();
@@ -111,6 +114,7 @@ export function applyProfile(id: string): void {
   if (typeof profile.sensitivity === "number") {
     sensitivitySig.value = Math.max(0, Math.min(100, profile.sensitivity));
   }
+  if (typeof profile.bpm === "number") setBpm(profile.bpm);
   saveState();
   logEvent("PROFILE", `loaded “${profile.name}”`, "note");
 }

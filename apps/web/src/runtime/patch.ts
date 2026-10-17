@@ -3,6 +3,7 @@
 import {
   audio,
   clamp1,
+  collapsedGroupsSig,
   connections,
   connEditorSig,
   engine,
@@ -23,8 +24,9 @@ import {
   touchConnections,
   type Conn,
 } from "./state";
+import type { InstrumentGroup } from "../audio/engine";
 import { saveStateSoon } from "./persist";
-import { setSoundOn } from "./sound";
+import { setSoundOn, startAudio } from "./sound";
 
 /** Drop queued chain steps, onset trackers and live trigger envelopes — called
  * when the patch is cleared or swapped so steps scheduled milliseconds earlier
@@ -155,11 +157,14 @@ export function clearPatch(): void {
 }
 
 /** Build a fresh random patch: a handful of instruments, each wired to a
- * random parameter with a random response curve. */
+ * random parameter with a random response curve. Draws from the expanded
+ * instrument groups only (so folded-away Sound FX stay out of it). */
 export function randomizePatch(paramKeys: string[]): void {
   for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
   resetSeqRuntime();
-  const insts = INSTRUMENTS.slice();
+  const collapsed = collapsedGroupsSig.peek();
+  const open = INSTRUMENTS.filter((i) => !collapsed[i.group]);
+  const insts = open.length ? open : INSTRUMENTS.slice();
   for (let i = insts.length - 1; i > 0; i--) {
     // Fisher–Yates shuffle
     const j = Math.floor(Math.random() * (i + 1));
@@ -175,6 +180,39 @@ export function randomizePatch(paramKeys: string[]): void {
   }
   connEditorSig.value = null;
   touchConnections();
+  saveStateSoon();
+}
+
+/** A ready-made psytrance groove: roll the ball to drive the kick and rolling
+ * bass (roll harder and the clap joins), move it for hats and the Goa arp,
+ * twist for the trance-gate lead, shake for a riser. Taps still ring the
+ * chimes, which share the key. */
+export function psyJamPatch(): void {
+  for (const inst of INSTRUMENTS) if (connections[inst.key]) disconnect(inst.key);
+  resetSeqRuntime();
+  const wire = (src: string, instKey: string, thresh = 0, atten = 1) => {
+    seqConfig(src).mode = "together"; // a groove, not an "in order" chain
+    connect(src, instKey);
+    connections[instKey]!.thresh = thresh;
+    connections[instKey]!.atten = atten;
+  };
+  wire("roll_speed", "psykick");
+  wire("roll_speed", "rollbass");
+  wire("roll_speed", "psyclap", 0.3);
+  wire("energy", "psyhats", 0.08);
+  wire("energy", "goaarp", 0.22, 0.9);
+  wire("twist", "supersaw", 0.1, 0.85);
+  wire("shake", "riser", 0.05, 0.8);
+  wire("tap", "chimes");
+  connEditorSig.value = null;
+  touchConnections();
+  saveStateSoon();
+}
+
+/** Fold / unfold an instrument group in the patch views. */
+export function toggleGroup(group: InstrumentGroup): void {
+  const prev = collapsedGroupsSig.peek();
+  collapsedGroupsSig.value = { ...prev, [group]: !prev[group] };
   saveStateSoon();
 }
 
@@ -214,9 +252,9 @@ export function updateChimes(conn: Conn | null, v: number, now: number): void {
  * changing the user's sound on/off intent. */
 export async function previewInstrument(key: string): Promise<void> {
   if (!audio.ctx) {
-    await audio.enable();
     // Enabling the context for a preview turns sound on for real; reflect it.
     setSoundOn(true);
+    await startAudio();
     return void audio.preview(key);
   }
   if (audio.ctx.state === "suspended") {

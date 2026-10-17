@@ -29,6 +29,12 @@ const bleInputs: BleBall[] = []; // ODD Balls paired directly over Web Bluetooth
 
 export const isOdd = (name: string) => /odd/i.test(name);
 
+/** iPhone/iPad (iPadOS reports itself as a Mac, but with touch points). Every
+ * iOS browser is WebKit, which has neither Web MIDI nor Web Bluetooth — except
+ * Web Bluetooth browsers like Bluefy, which add navigator.bluetooth. */
+const IS_IOS =
+  /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
 /** Every message from every input funnels through here. */
 export function onMidiMessage(deviceId: string, data: MidiBytes): void {
   // High-fidelity capture logs the raw message before any app-side filtering
@@ -126,7 +132,8 @@ export function refreshPorts(): void {
 export async function initMidi(): Promise<void> {
   if (!navigator.requestMIDIAccess) {
     statusSig.value = { on: false, label: "no Web MIDI" };
-    hintSig.value = { kind: "no-midi" };
+    if (!IS_IOS) hintSig.value = { kind: "no-midi" };
+    else hintSig.value = { kind: navigator.bluetooth ? "default" : "ios" };
     return;
   }
   try {
@@ -152,7 +159,7 @@ export async function connectBluetoothBall(): Promise<void> {
     syncActiveInputs();
     if (err instanceof BleConnectError) {
       if (err.kind === "cancelled") return void syncActiveInputs(); // user dismissed the chooser
-      if (err.kind === "unavailable") return void (hintSig.value = { kind: "bt-unavailable" });
+      if (err.kind === "unavailable") return void (hintSig.value = { kind: IS_IOS ? "ios" : "bt-unavailable" });
       if (err.kind === "blocked") return void (hintSig.value = { kind: "bt-blocked" });
       return void (hintSig.value = { kind: "bt-failed", detail: String(err.cause ?? err.message) });
     }

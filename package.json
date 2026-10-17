@@ -10,7 +10,7 @@
   "scripts": {
     "build": "npm run build -w @oddball/core && npm run build -w oddball-web",
     "dev": "npm run dev -w oddball-web",
-    "test": "npm run test -w @oddball/core",
+    "test": "npm run test -w @oddball/core && npm run test -w oddball-web",
     "typecheck": "npm run typecheck -w @oddball/core && npm run typecheck -w oddball-web"
   },
   "devDependencies": {
