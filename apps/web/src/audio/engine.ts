@@ -5,8 +5,20 @@
 //   generic set(v) (v in 0..1) that maps the value to gain/pitch/filter. The app
 //   layer routes any calculated parameter (roll speed, tilt, energy, ...) into
 //   any voice, so instruments can be freely patched to parameters.
+// - The psytrance voices are tempo-locked: while their input is up they play a
+//   pattern on the shared 16th-note grid (see clock.ts), so a kick, a rolling
+//   bass and an arp patched to different movements still groove together. The
+//   value sets intensity (level, filter, density) rather than timing.
+
+import { TempoClock, dueSteps, type StepCursor } from "./clock";
 
 const PENTATONIC = [0, 3, 5, 7, 10]; // minor pentatonic semitone offsets
+// The psytrance and new melodic voices stay on the white keys (E phrygian —
+// also raag Bhairavi — A minor, C major pentatonic), the same notes the chimes,
+// piano, bells and gamelan already use, so anything patched together stays
+// consonant.
+const PHRYGIAN = [0, 1, 3, 5, 7, 8, 10];
+const PSY_ROOT = 40; // E2
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const mtof = (m: number) => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -17,9 +29,20 @@ const scaleDeg = (scale: number[], note: number, octaves = 2): number => {
   return scale[k % scale.length] + 12 * Math.floor(k / scale.length);
 };
 
+export type InstrumentGroup = "psy" | "melodic" | "bass" | "fx";
+
+/** Display order + labels for the instrument groups (the rack's headers). */
+export const INSTRUMENT_GROUPS: { key: InstrumentGroup; label: string; about: string }[] = [
+  { key: "psy", label: "Psytrance", about: "locked to the BPM in the top bar — they groove together" },
+  { key: "melodic", label: "Melodic", about: "pitched instruments; most take a note input" },
+  { key: "bass", label: "Bass & pads", about: "sustained low end and textures" },
+  { key: "fx", label: "Sound FX", about: "weather, machines and creatures" },
+];
+
 export interface InstrumentDef {
   key: string;
   label: string;
+  group: InstrumentGroup;
   /** Accepts an optional second "note" input that picks the pitch of each
    * event (e.g. tap triggers the piano, Orient X chooses the note). */
   noted?: boolean;
@@ -38,6 +61,8 @@ interface Voice {
   active?: number;
   rpm?: number;
   prevV?: number;
+  /** Tempo-locked voices: the next grid step not yet scheduled. */
+  cursor?: StepCursor;
 }
 
 export class AudioEngine {
@@ -50,37 +75,54 @@ export class AudioEngine {
   scaleSpread = 24; // semitone range mapped across the chime pitch CC
   voices: Record<string, Voice> = {};
   chimesOn = true; // tap/note mallet hits
+  /** Shared 16th-note grid for the tempo-locked voices. */
+  readonly clock = new TempoClock();
+  /** One second of white noise, reused by the drum voices' hits. */
+  private noise: AudioBuffer | null = null;
+  /** Karplus–Strong sitar strings, rendered once per pitch. */
+  private ksCache = new Map<number, AudioBuffer>();
   private previewing: Record<string, number> | null = null;
 
-  // Instruments the UI can expose. Chimes is added by the app layer (it's an
-  // event instrument rather than a continuous voice).
+  // Instruments the UI can expose, grouped musical-first. Chimes is added by
+  // the app layer (it's an event instrument rather than a continuous voice).
   static get INSTRUMENTS(): InstrumentDef[] {
     return [
-      { key: "bass", label: "Alien bass" },
-      { key: "engine", label: "Revving engine" },
-      { key: "thunder", label: "Thunderstorm" },
-      { key: "thunderclap", label: "Thunderclap" },
-      { key: "lightning", label: "Lightning strike" },
-      { key: "rain", label: "Rainfall" },
-      { key: "theremin", label: "Theremin" },
-      { key: "choir", label: "Ghost choir" },
-      { key: "pad", label: "Warm pad" },
-      { key: "organ", label: "Drone organ" },
-      { key: "bells", label: "Shimmer bells", noted: true },
-      { key: "wind", label: "Noise wind" },
-      { key: "pluck", label: "Pluck arp", noted: true },
-      { key: "piano", label: "Piano walk", noted: true },
-      { key: "acid", label: "Acid 303", noted: true },
-      { key: "wobble", label: "Wobble bass" },
-      { key: "growl", label: "Monster growl" },
-      { key: "siren", label: "Siren" },
-      { key: "laser", label: "Laser zaps" },
-      { key: "bubbles", label: "Water bubbles" },
-      { key: "whale", label: "Whale song" },
-      { key: "crickets", label: "Crickets" },
-      { key: "ufo", label: "UFO warble" },
-      { key: "gamelan", label: "Gamelan", noted: true },
-      { key: "geiger", label: "Geiger clicks" },
+      { key: "psykick", label: "Psy kick", group: "psy" },
+      { key: "rollbass", label: "Rolling bass", group: "psy", noted: true },
+      { key: "psyhats", label: "Offbeat hats", group: "psy" },
+      { key: "psyclap", label: "Clap", group: "psy" },
+      { key: "goaarp", label: "Goa arp", group: "psy", noted: true },
+      { key: "supersaw", label: "Trance gate", group: "psy", noted: true },
+      { key: "riser", label: "Noise riser", group: "psy" },
+      { key: "piano", label: "Piano walk", group: "melodic", noted: true },
+      { key: "epiano", label: "Electric piano", group: "melodic", noted: true },
+      { key: "sitar", label: "Sitar", group: "melodic", noted: true },
+      { key: "kalimba", label: "Kalimba", group: "melodic", noted: true },
+      { key: "flute", label: "Pan flute", group: "melodic", noted: true },
+      { key: "pluck", label: "Pluck arp", group: "melodic", noted: true },
+      { key: "bells", label: "Shimmer bells", group: "melodic", noted: true },
+      { key: "gamelan", label: "Gamelan", group: "melodic", noted: true },
+      { key: "acid", label: "Acid 303", group: "melodic", noted: true },
+      { key: "theremin", label: "Theremin", group: "melodic" },
+      { key: "bass", label: "Alien bass", group: "bass" },
+      { key: "wobble", label: "Wobble bass", group: "bass" },
+      { key: "pad", label: "Warm pad", group: "bass" },
+      { key: "organ", label: "Drone organ", group: "bass" },
+      { key: "choir", label: "Ghost choir", group: "bass" },
+      { key: "engine", label: "Revving engine", group: "fx" },
+      { key: "thunder", label: "Thunderstorm", group: "fx" },
+      { key: "thunderclap", label: "Thunderclap", group: "fx" },
+      { key: "lightning", label: "Lightning strike", group: "fx" },
+      { key: "rain", label: "Rainfall", group: "fx" },
+      { key: "wind", label: "Noise wind", group: "fx" },
+      { key: "growl", label: "Monster growl", group: "fx" },
+      { key: "siren", label: "Siren", group: "fx" },
+      { key: "laser", label: "Laser zaps", group: "fx" },
+      { key: "bubbles", label: "Water bubbles", group: "fx" },
+      { key: "whale", label: "Whale song", group: "fx" },
+      { key: "crickets", label: "Crickets", group: "fx" },
+      { key: "ufo", label: "UFO warble", group: "fx" },
+      { key: "geiger", label: "Geiger clicks", group: "fx" },
     ];
   }
 
@@ -90,11 +132,31 @@ export class AudioEngine {
       this.enabled = true;
       return;
     }
+    // iOS Safari 17+: play Web Audio as media, so the ring/silent switch
+    // doesn't mute it (by default it's treated like a UI sound effect).
+    const session = (navigator as any).audioSession;
+    if (session && session.type !== "playback") {
+      try {
+        session.type = "playback";
+      } catch {
+        /* older WebKit: read-only or unsupported */
+      }
+    }
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     this.ctx = ctx;
+    this.noise = this._noiseBuffer(1);
+    this.clock.origin = ctx.currentTime + 0.05;
 
     this.master = ctx.createGain();
     this.master.gain.value = 0.9;
+    // Brick-wall safety limiter: layered voices (kick + bass + lead) would
+    // otherwise sum past full scale and hard-clip, harshest on phone speakers.
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 3;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.15;
 
     this.filter = ctx.createBiquadFilter();
     this.filter.type = "lowpass";
@@ -110,8 +172,19 @@ export class AudioEngine {
 
     this.filter.connect(dry).connect(this.master);
     this.filter.connect(this.reverb).connect(wet).connect(this.master);
-    this.master.connect(ctx.destination);
+    this.master.connect(limiter).connect(ctx.destination);
 
+    this.voices.psykick = this._buildPsyKick();
+    this.voices.rollbass = this._buildRollBass();
+    this.voices.psyhats = this._buildPsyHats();
+    this.voices.psyclap = this._buildPsyClap();
+    this.voices.goaarp = this._buildGoaArp();
+    this.voices.supersaw = this._buildSupersaw();
+    this.voices.riser = this._buildRiser();
+    this.voices.epiano = this._buildEpiano();
+    this.voices.sitar = this._buildSitar();
+    this.voices.kalimba = this._buildKalimba();
+    this.voices.flute = this._buildFlute();
     this.voices.bass = this._buildBass();
     this.voices.engine = this._buildEngine();
     this.voices.thunder = this._buildThunder();
@@ -145,6 +218,17 @@ export class AudioEngine {
   disable(): void {
     this.enabled = false;
     if (this.ctx) this.ctx.suspend();
+  }
+
+  /** Tempo of the BPM-locked voices. Works before audio starts, too. */
+  setBpm(bpm: number): void {
+    this.clock.setBpm(bpm, this.ctx?.currentTime ?? 0);
+  }
+
+  /** Current position in beats on the shared grid, or null while silent. */
+  beatPosition(): number | null {
+    if (!this.ctx || !this.enabled || this.ctx.state !== "running") return null;
+    return this.clock.position(this.ctx.currentTime) / 4;
   }
 
   /** Route a 0..1 parameter value into a continuous voice. `note` (0..1),
@@ -212,12 +296,18 @@ export class AudioEngine {
     tick();
   }
 
-  private _out(): GainNode {
-    // A per-voice output gain wired to master (dry) + reverb (wet).
+  private _out(reverb = 1): GainNode {
+    // A per-voice output gain wired to master (dry) + reverb (wet). Kicks and
+    // basses pass reverb = 0: a reverberant low end turns to mud.
     const g = this.ctx!.createGain();
     g.gain.value = 0;
     g.connect(this.master!);
-    g.connect(this.reverb!);
+    if (reverb >= 1) g.connect(this.reverb!);
+    else if (reverb > 0) {
+      const send = this.ctx!.createGain();
+      send.gain.value = reverb;
+      g.connect(send).connect(this.reverb!);
+    }
     return g;
   }
 
@@ -227,6 +317,633 @@ export class AudioEngine {
     voice.level += (target - voice.level) * k;
     voice.out.gain.value = voice.level;
     return voice.level;
+  }
+
+  /** Drive a tempo-locked voice: hand `play` every grid step that falls inside
+   * the lookahead window while the input is up. The cursor advances even while
+   * silent, so a voice that comes back in lands on the same grid as the rest. */
+  private _onGrid(voice: Voice, v: number, play: (step: number, t: number) => void): void {
+    const cursor = voice.cursor ?? (voice.cursor = { next: null });
+    for (const { step, time } of dueSteps(this.clock, cursor, this.ctx!.currentTime)) {
+      if (v > 0.02) play(step, time);
+    }
+  }
+
+  /** Disconnect a one-shot's nodes once a note starting at `t` has rung out. */
+  private _release(t: number, dur: number, ...nodes: AudioNode[]): void {
+    const ms = (t - this.ctx!.currentTime + dur + 0.2) * 1000;
+    setTimeout(() => nodes.forEach((n) => n.disconnect()), ms);
+  }
+
+  /** A burst of the shared noise buffer, from a random offset, starting at `t`. */
+  private _noiseSrc(t: number, dur: number): AudioBufferSourceNode {
+    const src = this.ctx!.createBufferSource();
+    src.buffer = this.noise;
+    src.start(t, Math.random() * Math.max(0, 0.95 - dur), dur);
+    return src;
+  }
+
+  // ---- Psytrance (tempo-locked) ---------------------------------------------
+
+  // Four-on-the-floor kick: tight pitch drop, short tail, and a click on top so
+  // it still cuts through a phone speaker that can't reproduce the sub.
+  private _buildPsyKick(): Voice {
+    const out = this._out(0);
+    out.gain.value = 1;
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v) =>
+      this._onGrid(voice, v, (step, t) => {
+        if (step % 4 === 0) this._kick(t, 0.5 + v * 0.4, out);
+      });
+    return voice;
+  }
+
+  private _kickCurve: Float32Array<ArrayBuffer> | null = null;
+
+  private _kick(t: number, level: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const o = ctx.createOscillator();
+    o.type = "sine";
+    o.frequency.setValueAtTime(330, t);
+    o.frequency.exponentialRampToValueAtTime(60, t + 0.035);
+    o.frequency.exponentialRampToValueAtTime(43, t + 0.26);
+    const drive = ctx.createWaveShaper();
+    drive.curve = this._kickCurve ?? (this._kickCurve = this._shaper(2.5));
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + 0.002);
+    g.gain.setValueAtTime(level, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    o.connect(drive).connect(g).connect(dest);
+    o.start(t);
+    o.stop(t + 0.32);
+    const click = this._noiseSrc(t, 0.015);
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 2500;
+    const cg = ctx.createGain();
+    cg.gain.value = 0;
+    cg.gain.setValueAtTime(level * 0.3, t);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.012);
+    click.connect(hp).connect(cg).connect(dest);
+    this._release(t, 0.32, g, cg);
+  }
+
+  // Rolling bassline: three staccato 16ths after every kick (K-B-B-B), each with
+  // its own snappy filter envelope. Value opens the filter and pushes the
+  // resonance; a note input moves the root around E phrygian.
+  private _buildRollBass(): Voice {
+    const out = this._out(0);
+    out.gain.value = 1;
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v, note) =>
+      this._onGrid(voice, v, (step, t) => {
+        if (step % 4 === 0) return; // the kick owns the downbeat
+        const deg = typeof note === "number" ? scaleDeg(PHRYGIAN, note, 1) : 0;
+        // Gallop up an octave on the bar's last 16th when driven hard.
+        const oct = v > 0.7 && step % 16 === 15 ? 12 : 0;
+        this._bassNote(mtof(PSY_ROOT + deg + oct), t, v, out);
+      });
+    return voice;
+  }
+
+  private _bassNote(hz: number, t: number, v: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const len = this.clock.stepDur * 0.8;
+    const level = 0.22 + v * 0.18;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + 0.003);
+    g.gain.setValueAtTime(level, t + len * 0.55);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    // Two cascaded lowpasses ≈ a 24 dB/oct ladder, swept down on every note.
+    const lp1 = ctx.createBiquadFilter();
+    const lp2 = ctx.createBiquadFilter();
+    lp1.type = "lowpass";
+    lp2.type = "lowpass";
+    lp1.Q.value = 2 + v * 5;
+    lp2.Q.value = 0.7;
+    const peak = Math.min(12000, hz * (4 + v * 18));
+    for (const lp of [lp1, lp2]) {
+      lp.frequency.setValueAtTime(peak, t);
+      lp.frequency.exponentialRampToValueAtTime(hz * 1.4, t + len);
+    }
+    const saw = ctx.createOscillator();
+    saw.type = "sawtooth";
+    saw.frequency.value = hz;
+    const body = ctx.createOscillator(); // a sine at the fundamental for weight
+    body.type = "sine";
+    body.frequency.value = hz;
+    const bodyG = ctx.createGain();
+    bodyG.gain.value = 0.5;
+    saw.connect(lp1).connect(lp2).connect(g);
+    body.connect(bodyG).connect(g);
+    g.connect(dest);
+    for (const o of [saw, body]) {
+      o.start(t);
+      o.stop(t + len + 0.02);
+    }
+    this._release(t, len, g);
+  }
+
+  // Hats: an open hat on every offbeat; driven harder, closed 16ths fill in.
+  private _buildPsyHats(): Voice {
+    const out = this._out(0.35);
+    out.gain.value = 1;
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v) =>
+      this._onGrid(voice, v, (step, t) => {
+        if (step % 4 === 2) this._hat(t, 0.1 + v * 0.12, 0.08 + v * 0.1, out);
+        else if (v > 0.45 && step % 2 === 1) this._hat(t, 0.035 + v * 0.04, 0.025, out);
+      });
+    return voice;
+  }
+
+  private _hat(t: number, level: number, decay: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const src = this._noiseSrc(t, decay + 0.02);
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 7000;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 10500;
+    bp.Q.value = 0.8;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(level, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    src.connect(hp).connect(bp).connect(g).connect(dest);
+    this._release(t, decay, g);
+  }
+
+  // Clap on beats 2 and 4: three fast noise slaps, then a short room tail.
+  private _buildPsyClap(): Voice {
+    const out = this._out(0.6);
+    out.gain.value = 1;
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v) =>
+      this._onGrid(voice, v, (step, t) => {
+        if (step % 8 === 4) this._clap(t, 0.34 + v * 0.32, out);
+      });
+    return voice;
+  }
+
+  private _clap(t: number, level: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const src = this._noiseSrc(t, 0.3);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 1400;
+    bp.Q.value = 1.1;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    for (let i = 0; i < 3; i++) {
+      const st = t + i * 0.011;
+      g.gain.setValueAtTime(level, st);
+      g.gain.exponentialRampToValueAtTime(level * 0.12, st + 0.009);
+    }
+    g.gain.setValueAtTime(level * 0.85, t + 0.033);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    src.connect(bp).connect(g).connect(dest);
+    this._release(t, 0.3, g);
+  }
+
+  // Goa arp: a 16th-note figure — root/octave pedal against a moving line —
+  // through a squelchy resonant filter into a tempo-synced dotted-8th echo.
+  // Gentle input plays 8ths; a note input transposes the figure.
+  private _buildGoaArp(): Voice {
+    const ctx = this.ctx!;
+    const out = this._out();
+    out.gain.value = 1;
+    const bus = ctx.createGain();
+    bus.connect(out);
+    const delay = ctx.createDelay(2);
+    let echo = this.clock.stepDur * 3;
+    delay.delayTime.value = echo;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.38;
+    const damp = ctx.createBiquadFilter();
+    damp.type = "lowpass";
+    damp.frequency.value = 2600;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.45;
+    bus.connect(delay);
+    delay.connect(damp).connect(fb).connect(delay);
+    damp.connect(wet).connect(out);
+    const figure = [0, 12, 7, 12, 0, 13, 8, 12, 0, 12, 7, 10, 8, 7, 5, 3]; // semitones over E4
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v, note) => {
+      const dt = this.clock.stepDur * 3;
+      if (dt !== echo) {
+        echo = dt;
+        delay.delayTime.setTargetAtTime(dt, ctx.currentTime, 0.05);
+      }
+      this._onGrid(voice, v, (step, t) => {
+        if (v < 0.35 && step % 2 === 1) return;
+        const root = PSY_ROOT + 24 + (typeof note === "number" ? scaleDeg(PHRYGIAN, note, 1) : 0);
+        this._goaNote(mtof(root + figure[step % 16]), t, v, bus);
+      });
+    };
+    return voice;
+  }
+
+  private _goaNote(hz: number, t: number, v: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const len = this.clock.stepDur * 0.95;
+    const level = 0.06 + v * 0.06;
+    const a = ctx.createOscillator();
+    a.type = "sawtooth";
+    a.frequency.value = hz;
+    const b = ctx.createOscillator();
+    b.type = "square";
+    b.frequency.value = hz;
+    b.detune.value = 9;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.Q.value = 8 + v * 9;
+    lp.frequency.setValueAtTime(Math.min(14000, hz * (3 + v * 9)), t);
+    lp.frequency.exponentialRampToValueAtTime(hz * 1.1, t + len);
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(level, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    a.connect(lp);
+    b.connect(lp);
+    lp.connect(g).connect(dest);
+    for (const o of [a, b]) {
+      o.start(t);
+      o.stop(t + len + 0.02);
+    }
+    this._release(t, len, g);
+  }
+
+  // Trance-gate lead: a detuned supersaw chord (root, diatonic fifth, octave)
+  // chopped by a 16-step gate pattern locked to the grid. Value fades it in and
+  // opens the filter; a note input moves the chord around E phrygian.
+  private _buildSupersaw(): Voice {
+    const ctx = this.ctx!;
+    const t0 = ctx.currentTime;
+    const out = this._out();
+    const gate = ctx.createGain();
+    gate.gain.value = 0;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 1200;
+    lp.Q.value = 0.9;
+    const mix = ctx.createGain();
+    mix.gain.value = 0.13;
+    const root0 = PSY_ROOT + 12;
+    const chord = (k: number) => {
+      const up = k + 4; // a fifth, counted in scale steps so it stays diatonic
+      const fifth = PHRYGIAN[up % 7] + (up >= 7 ? 12 : 0) - PHRYGIAN[k];
+      return [0, fifth, 12];
+    };
+    const oscs: OscillatorNode[][] = [[], [], []];
+    chord(0).forEach((semis, i) => {
+      for (const det of [-14, 0, 14]) {
+        const o = ctx.createOscillator();
+        o.type = "sawtooth";
+        o.frequency.value = mtof(root0 + semis);
+        o.detune.value = det + (Math.random() - 0.5) * 4;
+        o.connect(mix);
+        o.start(t0);
+        oscs[i].push(o);
+      }
+    });
+    mix.connect(lp).connect(gate).connect(out);
+    const pattern = [1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1];
+    let degree = 0;
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v, note) => {
+      this._glide(voice, v > 0.01 ? 0.06 + v * 0.38 : 0, 0.3, 0.06);
+      lp.frequency.value = 700 + v * v * 6500;
+      const k = typeof note === "number" ? Math.min(6, Math.floor(clamp01(note) * 7)) : 0;
+      if (k !== degree) {
+        degree = k;
+        const intervals = chord(k);
+        oscs.forEach((group, i) => {
+          const hz = mtof(root0 + PHRYGIAN[k] + intervals[i]);
+          for (const o of group) o.frequency.setTargetAtTime(hz, ctx.currentTime, 0.02);
+        });
+      }
+      // The gate keeps running while silent, so it stays phase-locked.
+      const sd = this.clock.stepDur;
+      this._onGrid(voice, 1, (step, t) => {
+        if (pattern[step % 16]) {
+          gate.gain.setTargetAtTime(1, t, 0.003);
+          gate.gain.setTargetAtTime(0.06, t + sd * 0.6, 0.012);
+        } else gate.gain.setTargetAtTime(0.06, t, 0.01);
+      });
+    };
+    return voice;
+  }
+
+  // Noise riser: the build-up whoosh. Value sweeps a resonant band of noise
+  // upward and swells it — roll faster and the build climbs.
+  private _buildRiser(): Voice {
+    const ctx = this.ctx!;
+    const out = this._out();
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 200;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 400;
+    bp.Q.value = 3;
+    this._loopNoise(hp);
+    hp.connect(bp).connect(out);
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v) => {
+      this._glide(voice, v > 0.01 ? 0.08 + v * 0.6 : 0, 0.08, 0.05);
+      bp.frequency.setTargetAtTime(300 * Math.pow(30, v), ctx.currentTime, 0.06); // 300 Hz → 9 kHz
+      bp.Q.value = 2 + v * 6;
+      hp.frequency.value = 150 + v * 1500;
+    };
+    return voice;
+  }
+
+  // ---- Melodic ------------------------------------------------------------------
+
+  // Electric piano: a two-operator FM tine — the modulation index decays, so
+  // each note starts bell-bright and mellows to a round tone. Notes come from
+  // A minor pentatonic; driven harder it adds a fifth above.
+  private _buildEpiano(): Voice {
+    const out = this._out();
+    out.gain.value = 1;
+    const scale = [0, 3, 5, 7, 10];
+    const voice: Voice = { out, level: 0, last: 0, set: () => {} };
+    voice.set = (v, note) => {
+      if (!this._due(voice, v, 160, 900)) return;
+      const deg =
+        typeof note === "number"
+          ? scaleDeg(scale, note)
+          : scale[Math.floor(Math.random() * scale.length)] + 12 * Math.floor(Math.random() * 2);
+      const gain = 0.1 + v * 0.14;
+      this._epNote(mtof(57 + deg), gain, out);
+      if (v > 0.6 && Math.random() < 0.5) this._epNote(mtof(57 + deg + 7), gain * 0.6, out);
+    };
+    return voice;
+  }
+
+  private _epNote(hz: number, gain: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const decay = 1.4 + 220 / hz; // low notes ring longer
+    const car = ctx.createOscillator();
+    car.type = "sine";
+    car.frequency.value = hz;
+    const mod = ctx.createOscillator();
+    mod.type = "sine";
+    mod.frequency.value = hz;
+    const index = ctx.createGain();
+    index.gain.setValueAtTime(hz * 2.2, t);
+    index.gain.exponentialRampToValueAtTime(hz * 0.12, t + 0.9);
+    mod.connect(index).connect(car.frequency);
+    // The "tine bark": a high, very short modulator on the attack.
+    const bark = ctx.createOscillator();
+    bark.type = "sine";
+    bark.frequency.value = hz * 14;
+    const barkIdx = ctx.createGain();
+    barkIdx.gain.setValueAtTime(hz * 0.8, t);
+    barkIdx.gain.exponentialRampToValueAtTime(0.01, t + 0.06);
+    bark.connect(barkIdx).connect(car.frequency);
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.003);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    car.connect(g).connect(dest);
+    for (const o of [car, mod, bark]) {
+      o.start(t);
+      o.stop(t + decay + 0.05);
+    }
+    this._release(t, decay, g);
+  }
+
+  // Sitar: a Karplus–Strong plucked string (rendered once per pitch) through a
+  // buzzing jawari bridge, with a little meend — the pitch slides up into each
+  // note. It wanders raag Bhairavi, which shares E phrygian's notes.
+  private _buildSitar(): Voice {
+    const out = this._out();
+    out.gain.value = 1;
+    const voice: Voice = { out, level: 0, last: 0, step: 7, set: () => {} };
+    voice.set = (v, note) => {
+      if (!this._due(voice, v, 180, 950)) return;
+      let idx: number;
+      if (typeof note === "number") idx = Math.min(13, Math.floor(clamp01(note) * 14));
+      else {
+        // Wander a step or two, drifting home to Sa (the tonic) now and then.
+        const jump = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.floor(Math.random() * 2));
+        idx = Math.random() < 0.2 ? 7 : Math.max(0, Math.min(13, voice.step! + jump));
+        voice.step = idx;
+      }
+      const midi = PSY_ROOT + 12 + PHRYGIAN[idx % 7] + 12 * Math.floor(idx / 7);
+      this._sitarNote(midi, 0.2 + v * 0.22, out);
+    };
+    return voice;
+  }
+
+  private _jawari: Float32Array<ArrayBuffer> | null = null;
+
+  private _sitarNote(midi: number, gain: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const src = ctx.createBufferSource();
+    const string = this._ksString(midi);
+    src.buffer = string;
+    src.playbackRate.setValueAtTime(0.97, t);
+    src.playbackRate.exponentialRampToValueAtTime(1, t + 0.09);
+    if (!this._jawari) {
+      // Asymmetric curve: soft saturation plus an even-harmonic term (the buzz).
+      const n = 1024;
+      this._jawari = new Float32Array(n);
+      for (let i = 0; i < n; i++) {
+        const x = (i * 2) / n - 1;
+        this._jawari[i] = Math.tanh(1.8 * x) / Math.tanh(1.8) + 0.3 * x * x;
+      }
+    }
+    const jawari = ctx.createWaveShaper();
+    jawari.curve = this._jawari;
+    const dc = ctx.createBiquadFilter(); // the even term adds DC; strip it
+    dc.type = "highpass";
+    dc.frequency.value = 70;
+    const presence = ctx.createBiquadFilter();
+    presence.type = "peaking";
+    presence.frequency.value = 2800;
+    presence.Q.value = 1.2;
+    presence.gain.value = 7;
+    const g = ctx.createGain();
+    g.gain.value = gain;
+    src.connect(jawari).connect(dc).connect(presence).connect(g).connect(dest);
+    src.start(t);
+    this._release(t, string.duration, g);
+  }
+
+  /** Render a plucked string with Karplus–Strong, cached per MIDI note. An
+   * allpass supplies the fractional part of the loop delay so high notes stay
+   * in tune (integer-only loops drift sharp by up to ~20 cents up there). */
+  private _ksString(midi: number): AudioBuffer {
+    const cached = this.ksCache.get(midi);
+    if (cached) return cached;
+    const rate = this.ctx!.sampleRate;
+    const len = Math.floor(rate * 2.2);
+    const buf = this.ctx!.createBuffer(1, len, rate);
+    const out = buf.getChannelData(0);
+    // Loop delay = n samples (ring) − 0.5 (two-point average) + d (allpass).
+    const period = rate / mtof(midi);
+    const n = Math.max(2, Math.floor(period));
+    const d = period - n + 0.5;
+    const c = (1 - d) / (1 + d);
+    const ring = new Float32Array(n);
+    let lp = 0;
+    for (let i = 0; i < n; i++) {
+      lp += 0.6 * (Math.random() * 2 - 1 - lp); // softened noise: a plectrum, not a hammer
+      ring[i] = lp;
+    }
+    let apX = 0;
+    let apY = 0;
+    let idx = 0;
+    for (let i = 0; i < len; i++) {
+      const next = idx + 1 === n ? 0 : idx + 1;
+      const cur = ring[idx];
+      const avg = 0.5 * (cur + ring[next]) * 0.996;
+      const y = c * avg + apX - c * apY;
+      apX = avg;
+      apY = y;
+      out[i] = cur;
+      ring[idx] = y;
+      idx = next;
+    }
+    const fade = Math.floor(rate * 0.05); // no click where the buffer ends
+    for (let i = 0; i < fade; i++) out[len - 1 - i] *= i / fade;
+    this.ksCache.set(midi, buf);
+    return buf;
+  }
+
+  // Kalimba: a soft sine tine with a quick inharmonic overtone and a thumb
+  // click, picking C major pentatonic in the left/right zig-zag of real tines.
+  private _buildKalimba(): Voice {
+    const out = this._out();
+    out.gain.value = 1;
+    const scale = [0, 2, 4, 7, 9];
+    const order = [0, 2, 4, 1, 3, 5, 7, 6, 8, 5, 3, 1]; // positions on a 2-octave layout
+    const voice: Voice = { out, level: 0, last: 0, phase: 0, set: () => {} };
+    voice.set = (v, note) => {
+      if (!this._due(voice, v, 120, 760)) return;
+      let deg: number;
+      if (typeof note === "number") deg = scaleDeg(scale, note);
+      else {
+        const k = order[voice.phase!++ % order.length];
+        deg = scale[k % 5] + 12 * Math.floor(k / 5);
+      }
+      this._tine(mtof(60 + deg), 0.16 + v * 0.18, out);
+    };
+    return voice;
+  }
+
+  private _tine(hz: number, gain: number, dest: AudioNode): void {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const decay = 1.1 + 200 / hz;
+    const g = ctx.createGain();
+    g.gain.value = 0;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(gain, t + 0.002);
+    g.connect(dest);
+    for (const [mult, amp, d] of [
+      [1, 1, decay],
+      [5.4, 0.25, 0.1],
+      [8.9, 0.1, 0.05],
+    ]) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = hz * mult;
+      const og = ctx.createGain();
+      og.gain.value = 0;
+      og.gain.setValueAtTime(amp, t);
+      og.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(og).connect(g);
+      o.start(t);
+      o.stop(t + d + 0.05);
+    }
+    const click = this._noiseSrc(t, 0.008);
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = hz * 3;
+    const cg = ctx.createGain();
+    cg.gain.value = gain * 0.5;
+    click.connect(bp).connect(cg).connect(g);
+    this._release(t, decay, g);
+  }
+
+  // Pan flute: a breathy legato line. A note input picks the pitch; otherwise
+  // the value plays it like a slide whistle quantized to E minor pentatonic —
+  // louder AND higher as you push, gliding between notes.
+  private _buildFlute(): Voice {
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const out = this._out();
+    const scale = [0, 3, 5, 7, 10];
+    const root = 64; // E4
+    const steps = scale.length * 2;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 3500;
+    const vib = ctx.createOscillator();
+    vib.type = "sine";
+    vib.frequency.value = 5;
+    const vibDepth = ctx.createGain();
+    vibDepth.gain.value = 4;
+    vib.connect(vibDepth);
+    vib.start(t);
+    const partials: [OscillatorNode, number][] = [];
+    for (const [mult, amp] of [
+      [1, 1],
+      [2, 0.09],
+      [3, 0.05],
+    ]) {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.value = mtof(root) * mult;
+      const og = ctx.createGain();
+      og.gain.value = amp;
+      vibDepth.connect(o.detune);
+      o.connect(og).connect(lp);
+      o.start(t);
+      partials.push([o, mult]);
+    }
+    // Breath: noise band-passed around the second harmonic.
+    const breath = ctx.createBiquadFilter();
+    breath.type = "bandpass";
+    breath.frequency.value = mtof(root) * 2;
+    breath.Q.value = 1.4;
+    const breathG = ctx.createGain();
+    breathG.gain.value = 0.16;
+    this._loopNoise(breath);
+    breath.connect(breathG).connect(lp);
+    lp.connect(out);
+    let cur = -1;
+    let curHz = 0;
+    const voice: Voice = { out, level: 0, set: () => {} };
+    voice.set = (v, note) => {
+      this._glide(voice, v > 0.01 ? 0.04 + v * 0.22 : 0, 0.12, 0.06);
+      const pos = (typeof note === "number" ? clamp01(note) : v) * steps;
+      // Hysteresis: a value hovering on a boundary doesn't warble between notes.
+      if (cur < 0 || pos < cur - 0.15 || pos > cur + 1.15) cur = Math.min(steps - 1, Math.floor(pos));
+      const hz = mtof(root + scale[cur % 5] + 12 * Math.floor(cur / 5));
+      if (hz !== curHz) {
+        curHz = hz;
+        const now = ctx.currentTime;
+        for (const [o, mult] of partials) o.frequency.setTargetAtTime(hz * mult, now, 0.035);
+        breath.frequency.setTargetAtTime(hz * 2, now, 0.035);
+      }
+      vibDepth.gain.value = 3 + v * 9;
+    };
+    return voice;
   }
 
   // ---- Voices -----------------------------------------------------------

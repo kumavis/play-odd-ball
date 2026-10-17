@@ -5,16 +5,41 @@
 // consume — same architecture as the original app, minus the manual DOM.
 import { signal } from "@preact/signals";
 import { OddballEngine, SEQ_GAP_DEFAULT, type Gesture } from "@oddball/core";
-import { AudioEngine, type InstrumentDef } from "../audio/engine";
+import { AudioEngine, INSTRUMENT_GROUPS, type InstrumentDef, type InstrumentGroup } from "../audio/engine";
+import { BPM_DEFAULT, clampBpm } from "../audio/clock";
 
 export const engine = new OddballEngine();
 export const audio = new AudioEngine();
 
 // ---- Instruments ---------------------------------------------------------
-export const INSTRUMENTS: InstrumentDef[] = [
+// Listed group by group (musical first), so the rack can head each run.
+const ALL_INSTRUMENTS: InstrumentDef[] = [
   ...AudioEngine.INSTRUMENTS,
-  { key: "chimes", label: "Chimes", noted: true },
+  { key: "chimes", label: "Chimes", group: "melodic", noted: true },
 ];
+export const INSTRUMENTS: InstrumentDef[] = INSTRUMENT_GROUPS.flatMap((g) =>
+  ALL_INSTRUMENTS.filter((i) => i.group === g.key)
+);
+export { INSTRUMENT_GROUPS };
+
+/** Collapsed instrument groups. Sound FX starts folded away so the rack leads
+ * with the musical instruments; a patched instrument always stays visible. */
+export const collapsedGroupsSig = signal<Partial<Record<InstrumentGroup, boolean>>>({ fx: true });
+
+/** Shown in the patch views: its group is expanded, or it's patched. Reads
+ * `connections` (not a signal) — callers also subscribe to connVersion. */
+export function instrumentVisible(inst: InstrumentDef): boolean {
+  return !collapsedGroupsSig.value[inst.group] || !!connections[inst.key];
+}
+
+// ---- Tempo -----------------------------------------------------------------
+/** Tempo of the BPM-locked (psytrance) instruments. */
+export const bpmSig = signal(BPM_DEFAULT);
+export function setBpm(bpm: number): void {
+  const next = clampBpm(bpm);
+  audio.setBpm(next);
+  bpmSig.value = next;
+}
 
 // ---- Connections ---------------------------------------------------------
 // Each instrument input takes one parameter (or none). A connection carries a
@@ -168,10 +193,21 @@ export const statusSig = signal<{ on: boolean; label: string }>({ on: false, lab
 export const rateSig = signal(0); // msg/s
 export const lastNoteSig = signal<{ name: string; sub: string }>({ name: "—", sub: "waiting for a tap…" });
 
-export type HintKind = "default" | "bt-unavailable" | "bt-blocked" | "bt-failed" | "no-midi" | "midi-denied" | null;
+export type HintKind =
+  | "default"
+  | "ios"
+  | "bt-unavailable"
+  | "bt-blocked"
+  | "bt-failed"
+  | "no-midi"
+  | "midi-denied"
+  | null;
 export const hintSig = signal<{ kind: HintKind; detail?: string }>({ kind: "default" });
 
 export const soundOnSig = signal(true); // reflects the button; audio may be gated by autoplay
+/** The AudioContext is actually producing sound (false until the browser lets
+ * it start — on phones that takes a tap — and while suspended/interrupted). */
+export const audioRunningSig = signal(false);
 export const viewsSig = signal<Record<string, boolean>>({});
 export const histOpenSig = signal(false);
 export const patchViewSig = signal<"rack" | "orbit">("rack");
@@ -202,6 +238,8 @@ export interface Profile {
   seqCfg: Record<string, SeqCfg>;
   gestures: unknown[];
   sensitivity: number;
+  /** Absent in profiles saved before the BPM-locked instruments existed. */
+  bpm?: number;
 }
 export const profilesSig = signal<Profile[]>([]);
 

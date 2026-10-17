@@ -25,6 +25,19 @@ required. Open the page in Chrome or Edge (over HTTPS or `localhost`), click
 streams straight into the visualizer. Balls already paired through Audio MIDI
 Setup still show up in the port dropdown as before.
 
+### On a phone
+
+The web app works on phones: tap a parameter, then an instrument, to patch
+(you can scroll the rack in between), tap a cable to edit it, pinch to zoom
+the orbit view. Browsers won't start audio until you touch the page, so the
+sound button reads **Start sound** until then.
+
+- **Android**: Chrome pairs the ball directly with **🔵 Connect**.
+- **iPhone / iPad**: every iOS browser is WebKit, which has no Web Bluetooth
+  or Web MIDI, so Safari and Chrome can't reach the ball. Use a Web Bluetooth
+  browser such as **Bluefy**. You can still try every instrument with its ▶
+  button in any browser.
+
 ### Repository layout
 
 - [`packages/core`](packages/core/) — **`@oddball/core`**, a TypeScript library
@@ -35,10 +48,24 @@ Setup still show up in the port dropdown as before.
   dependencies; tested against the real recordings in [`data/`](data/).
 - [`apps/web`](apps/web/) — the Preact + TypeScript webapp (patch bay, orbit
   view, gesture editor, synth), built with Vite on top of `@oddball/core`.
-  Pitched instruments (chimes, piano, pluck, bells, gamelan, acid) take an
-  optional second **note** input alongside their trigger: click the cable and
-  pick a "note from" parameter — e.g. tap triggers the piano while Orient X
-  chooses which note it plays (shown as a thin dashed cable).
+  Instruments are grouped musical-first (the rack's group headers fold away;
+  **Sound FX** starts folded, and a patched instrument always stays visible):
+  - **Psytrance** (locked to the **BPM** in the top bar, default 145) — psy
+    kick, rolling bass, offbeat hats, clap, Goa arp, trance gate, noise riser.
+    While its input is up each plays its pattern on one shared 16th-note grid,
+    so instruments patched to different movements still groove together; the
+    value sets intensity (level, filter, density), not timing. **🌀 Psy jam**
+    patches a ready-made groove: roll the ball for kick + bass, move it for
+    hats + arp, twist for the lead.
+  - **Melodic** — piano, electric piano, sitar, kalimba, pan flute, chimes,
+    pluck, bells, gamelan, acid, theremin.
+  - **Bass & pads**, **Sound FX**.
+
+  Everything stays on the white keys (E phrygian / A minor), so any patch is
+  consonant. Pitched instruments take an optional second **note** input
+  alongside their trigger: click the cable and pick a "note from" parameter —
+  e.g. tap triggers the piano while Orient X chooses which note it plays
+  (shown as a thin dashed cable).
 - [`docs/CONVERSION-NOTES.md`](docs/CONVERSION-NOTES.md) — bugs and issues
   found (fixed vs. preserved) during the TypeScript/Preact rewrite.
 - [`docs/IMPLEMENTATION-REVIEW.md`](docs/IMPLEMENTATION-REVIEW.md) — post-rewrite
@@ -61,7 +88,7 @@ Then open the printed URL in Chrome or Edge (not Brave, unless you've enabled
 Other commands:
 
 ```bash
-npm test           # @oddball/core vitest suite (includes data/ replay tests)
+npm test           # vitest: @oddball/core (incl. data/ replay tests) + web tempo clock
 npm run build      # library typecheck/emit + production app build
 npm run typecheck  # both workspaces
 ```

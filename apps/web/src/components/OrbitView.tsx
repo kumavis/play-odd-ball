@@ -7,10 +7,13 @@
 import { useEffect, useRef } from "preact/hooks";
 import {
   clamp1,
+  collapsedGroupsSig,
   connections,
   connEditorSig,
+  connVersion,
   gesturesSig,
   INSTRUMENTS,
+  instrumentVisible,
   paramByKey,
   paramsList,
   patchViewSig,
@@ -35,6 +38,7 @@ const ORB = {
   LINK_LEN: 118,
 };
 const ORB_BARS = 18;
+const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 interface OrbNode {
   type: "ball" | "param" | "inst";
@@ -170,9 +174,11 @@ class Orbit {
       nodes.push(n);
     });
 
-    INSTRUMENTS.forEach((inst, i) => {
+    // Same folding as the rack: collapsed groups only show patched members.
+    const insts = INSTRUMENTS.filter(instrumentVisible);
+    insts.forEach((inst, i) => {
       const id = "i:" + inst.key;
-      const a = (i / INSTRUMENTS.length) * Math.PI * 2;
+      const a = (i / insts.length) * Math.PI * 2;
       const n =
         prev[id] ||
         ({
@@ -410,16 +416,30 @@ class Orbit {
       ctx.fill();
     }
     ctx.restore();
-    // label just outside the apex
-    const lx = n.x + Math.cos(a) * (r + 9);
-    const ly = n.y + Math.sin(a) * (r + 9);
+    // Label just outside the apex — or, when that would run off the visible
+    // area (narrow phone canvases push triangles to the edges), just inside
+    // the base instead.
     ctx.save();
     ctx.font = "600 9.5px system-ui, sans-serif";
+    const tw = ctx.measureText(n.label).width;
+    const place = (side: 1 | -1) => {
+      const dist = side > 0 ? r + 9 : r * 0.7 + 9;
+      const c = Math.cos(a) * side;
+      const lx = n.x + Math.cos(a) * dist * side;
+      const ly = n.y + Math.sin(a) * dist * side;
+      const align: CanvasTextAlign = c < -0.2 ? "right" : c > 0.2 ? "left" : "center";
+      const left = align === "right" ? lx - tw : align === "left" ? lx : lx - tw / 2;
+      return { lx, ly, align, left };
+    };
+    const { s, x: vx, y: vy } = this.view;
+    let p = place(1);
+    if (p.left < -vx / s || p.left + tw > (this.w - vx) / s || p.ly < -vy / s + 6 || p.ly > (this.h - vy) / s - 6)
+      p = place(-1);
     ctx.textBaseline = "middle";
-    ctx.textAlign = Math.cos(a) < -0.2 ? "right" : Math.cos(a) > 0.2 ? "left" : "center";
+    ctx.textAlign = p.align;
     ctx.fillStyle = on ? "#e9ecff" : "#8b90b8";
     ctx.globalAlpha = this.link && this.link.over === n ? 1 : 0.92;
-    ctx.fillText(n.label, lx, ly);
+    ctx.fillText(n.label, p.lx, p.ly);
     ctx.restore();
   }
 
@@ -516,10 +536,11 @@ class Orbit {
     };
   }
 
-  hitInst(x: number, y: number): OrbNode | null {
+  /** `slop` widens the hit area (screen px) — fingers are less precise. */
+  hitInst(x: number, y: number, slop = 6): OrbNode | null {
     for (const n of this.nodes) {
       if (n.type !== "inst") continue;
-      if (Math.hypot(x - n.x, y - n.y) <= n.r + 6) return n;
+      if (Math.hypot(x - n.x, y - n.y) <= n.r + slop / this.view.s) return n;
     }
     return null;
   }
@@ -537,9 +558,9 @@ class Orbit {
   }
 
   /** Distance from a point to a connection's cable, for click-to-edit. */
-  cableAt(x: number, y: number): string | null {
+  cableAt(x: number, y: number, slop = 9): string | null {
     let best: string | null = null;
-    let bestD = 9;
+    let bestD = slop / this.view.s;
     for (const inst of INSTRUMENTS) {
       const conn = connections[inst.key];
       if (!conn) continue;
@@ -575,10 +596,12 @@ export function OrbitView() {
   const orbitRef = useRef<Orbit | null>(null);
   const active = patchViewSig.value === "orbit";
   gesturesSig.value; // rebuild the node set when the moves change
+  collapsedGroupsSig.value; // …or a group folds/unfolds
+  const version = connVersion.value; // …or patching reveals/hides a folded instrument
 
   useEffect(() => {
     if (orbitRef.current && orbitRef.current.built) orbitRef.current.build();
-  }, [gesturesSig.value]);
+  }, [gesturesSig.value, collapsedGroupsSig.value, version]);
 
   useEffect(() => {
     const cv = canvasRef.current!;
@@ -586,7 +609,43 @@ export function OrbitView() {
     // Debug/test hook (canvas UIs are otherwise opaque to automation).
     (window as any).__oddballOrbit = orbit;
 
+    // Two-finger pinch: zoom around the fingers' midpoint and pan with it. Any
+    // one-finger action already under way (pan, node drag, unarmed cable) is
+    // dropped when the second finger lands.
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinch: { d: number; mx: number; my: number } | null = null;
+    const measure = () => {
+      const [a, b] = [...touches.values()];
+      return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2 };
+    };
+    const onTouchDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || patchViewSig.peek() !== "orbit") return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size !== 2) return;
+      orbit.pan = null;
+      orbit.drag = null;
+      if (orbit.link && !orbit.link.armed) orbit.link = null;
+      pinch = measure();
+      e.stopImmediatePropagation(); // keep onDown from starting a second action
+    };
+    const onTouchMove = (e: PointerEvent) => {
+      if (!touches.has(e.pointerId)) return;
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (!pinch || touches.size < 2) return;
+      const m = measure();
+      orbit.zoomAt(m.mx, m.my, m.d / pinch.d);
+      orbit.view.x += m.mx - pinch.mx;
+      orbit.view.y += m.my - pinch.my;
+      pinch = m;
+    };
+    const onTouchEnd = (e: PointerEvent) => {
+      touches.delete(e.pointerId);
+      if (touches.size < 2) pinch = null;
+    };
+    const slop = (e: PointerEvent, mouse: number, finger: number) => (e.pointerType === "touch" ? finger : mouse);
+
     const onMove = (e: PointerEvent) => {
+      if (pinch) return;
       if (orbit.pan) {
         // Pan in screen space — the view offset is a screen-space quantity.
         orbit.view.x += e.clientX - orbit.pan.lastX;
@@ -599,7 +658,7 @@ export function OrbitView() {
       if (orbit.link) {
         orbit.link.x = p.x;
         orbit.link.y = p.y;
-        orbit.link.over = orbit.hitInst(p.x, p.y);
+        orbit.link.over = orbit.hitInst(p.x, p.y, slop(e, 6, 16));
       } else if (orbit.drag) {
         const n = orbit.drag.node;
         n.x = p.x - orbit.drag.ox;
@@ -626,7 +685,7 @@ export function OrbitView() {
       }
       const p = orbit.point(e);
       if (orbit.link && !orbit.link.armed) {
-        const inst = orbit.hitInst(p.x, p.y);
+        const inst = orbit.hitInst(p.x, p.y, slop(e, 6, 16));
         if (inst) {
           completeLink(inst.key);
           return;
@@ -654,7 +713,7 @@ export function OrbitView() {
       e.preventDefault();
       // 0. an armed link from a previous click lands on an instrument (or cancels)
       if (orbit.link?.armed) {
-        const inst = orbit.hitInst(p.x, p.y);
+        const inst = orbit.hitInst(p.x, p.y, slop(e, 6, 16));
         completeLink(inst ? inst.key : null);
         // Landing/cancelling a link is a complete action: keep the global
         // "click outside closes the editor" handler out of it.
@@ -665,7 +724,7 @@ export function OrbitView() {
       for (const n of orbit.nodes) {
         if (n.type !== "param") continue;
         const port = orbit.portOut(n);
-        if (Math.hypot(p.x - port.x, p.y - port.y) <= 11) {
+        if (Math.hypot(p.x - port.x, p.y - port.y) <= slop(e, 11, 20) / orbit.view.s) {
           orbit.link = { fromKey: n.key, x: p.x, y: p.y, over: null, downX: p.x, downY: p.y, armed: false };
           window.addEventListener("pointermove", onMove);
           window.addEventListener("pointerup", onUp);
@@ -684,7 +743,7 @@ export function OrbitView() {
       }
       // 3. a cable → open its connection editor (with the Disconnect button,
       // threshold/attenuation and playback controls — same as the rack).
-      const inst = orbit.cableAt(p.x, p.y);
+      const inst = orbit.cableAt(p.x, p.y, slop(e, 9, 16));
       if (inst) {
         connEditorSig.value = { instKey: inst, x: e.clientX, y: e.clientY };
         // Rack cables are .cable-hit elements, which the editor's global
@@ -717,12 +776,21 @@ export function OrbitView() {
     const onWindowDown = (e: PointerEvent) => {
       if (orbit.link?.armed && !(e.target as HTMLElement).closest(".orbit")) clearLink();
     };
+    // Registered before onDown so a second finger can stop it.
+    cv.addEventListener("pointerdown", onTouchDown);
+    cv.addEventListener("pointermove", onTouchMove);
+    cv.addEventListener("pointerup", onTouchEnd);
+    cv.addEventListener("pointercancel", onTouchEnd);
     cv.addEventListener("pointerdown", onDown);
     cv.addEventListener("wheel", onWheel, { passive: false });
     cv.addEventListener("dblclick", onDblClick);
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onWindowDown);
     return () => {
+      cv.removeEventListener("pointerdown", onTouchDown);
+      cv.removeEventListener("pointermove", onTouchMove);
+      cv.removeEventListener("pointerup", onTouchEnd);
+      cv.removeEventListener("pointercancel", onTouchEnd);
       cv.removeEventListener("pointerdown", onDown);
       cv.removeEventListener("wheel", onWheel);
       cv.removeEventListener("dblclick", onDblClick);
@@ -747,8 +815,9 @@ export function OrbitView() {
     <div class={`orbit${active ? "" : " orbit--hidden"}`}>
       <canvas class="orbit-canvas" ref={canvasRef}></canvas>
       <div class="orbit-hint">
-        click or drag a signal's halo dot onto a triangle to patch it · click a cable to edit / disconnect · drag
-        nodes to rearrange · scroll to zoom · drag the background to pan · double-click to reset
+        {COARSE
+          ? "tap a halo dot, then a triangle, to patch · tap a cable to edit · drag to pan · pinch to zoom"
+          : "click or drag a signal's halo dot onto a triangle to patch it · click a cable to edit / disconnect · drag nodes to rearrange · scroll to zoom · drag the background to pan · double-click to reset"}
       </div>
     </div>
   );

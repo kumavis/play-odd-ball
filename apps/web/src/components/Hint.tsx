@@ -5,6 +5,18 @@ export function Hint() {
   if (!hint.kind) return <div class="hint hide" />;
   let body;
   switch (hint.kind) {
+    case "ios":
+      // Every iOS browser is WebKit underneath, and WebKit ships neither Web
+      // MIDI nor Web Bluetooth — "use Chrome" doesn't help there.
+      body = (
+        <p>
+          <strong>iPhone / iPad browsers can't reach the ball directly</strong> (no Web Bluetooth or Web MIDI on
+          iOS). Open this page in <strong>Bluefy</strong>, a free Web Bluetooth browser, and tap{" "}
+          <code>🔵 Connect</code> — or use Chrome on Android or a computer. You can still try every instrument with
+          its <code>▶</code> button.
+        </p>
+      );
+      break;
     case "no-midi":
       body = (
         <p>
@@ -50,11 +62,19 @@ export function Hint() {
     default:
       body = (
         <p>
-          <strong>Connect a ball.</strong> Click <code>🔵 Connect ball</code> to pair over Bluetooth right here (Chrome
-          or Edge) — no macOS MIDI setup needed. Already paired in <em>Audio MIDI Setup</em>? Pick its port above
-          instead. Then bounce / shake / spin the ball.
+          <strong>Connect a ball.</strong> Press <code>🔵 Connect</code> to pair over Bluetooth right here (Chrome or
+          Edge, on a computer or Android) — no macOS MIDI setup needed. Already paired in <em>Audio MIDI Setup</em>?
+          Pick its port above instead. Then bounce / shake / spin the ball — or press <code>🌀 Psy jam</code> and
+          roll it.
         </p>
       );
   }
-  return <div class="hint">{body}</div>;
+  return (
+    <div class="hint" role="status">
+      {body}
+      <button class="hint-close" aria-label="Dismiss" title="Dismiss" onClick={() => (hintSig.value = { kind: null })}>
+        ×
+      </button>
+    </div>
+  );
 }

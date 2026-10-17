@@ -1,7 +1,9 @@
 // Persistence: patch config + settings survive a reload. Keys and schema match
 // the original vanilla app exactly, so existing users keep their setups.
 import {
+  bpmSig,
   clamp1,
+  collapsedGroupsSig,
   connections,
   histOpenSig,
   mkConn,
@@ -10,6 +12,7 @@ import {
   sensitivitySig,
   seqCfg,
   SEQ_GAP_DEFAULT,
+  setBpm,
   touchConnections,
   viewsSig,
   type SeqCfg,
@@ -71,6 +74,8 @@ export function serializeState() {
     views: viewsSig.peek(),
     histOpen: histOpenSig.peek(),
     patchView: patchViewSig.peek(),
+    bpm: bpmSig.peek(),
+    collapsedGroups: collapsedGroupsSig.peek(),
   };
 }
 
@@ -145,5 +150,9 @@ export function applySavedState(saved: any): void {
   applySeqCfg(saved.seqCfg);
   if (typeof saved.sensitivity === "number") {
     sensitivitySig.value = Math.max(0, Math.min(100, saved.sensitivity));
+  }
+  if (typeof saved.bpm === "number") setBpm(saved.bpm);
+  if (saved.collapsedGroups && typeof saved.collapsedGroups === "object") {
+    collapsedGroupsSig.value = { ...saved.collapsedGroups };
   }
 }

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
+  collapsedGroupsSig,
   connections,
   connVersion,
   connEditorSig,
+  INSTRUMENT_GROUPS,
   INSTRUMENTS,
+  instrumentVisible,
   paramByKey,
   paramsList,
   patchViewSig,
@@ -11,22 +14,29 @@ import {
   SPARK_MAX,
   clamp1,
 } from "../runtime/state";
-import { connect, previewInstrument, shape } from "../runtime/patch";
+import { connect, previewInstrument, shape, toggleGroup } from "../runtime/patch";
 import { saveStateSoon } from "../runtime/persist";
 import { useFrame } from "../hooks";
 import { OrbitView } from "./OrbitView";
 import { HistDock } from "./HistDock";
 
 const SVGNS = "http://www.w3.org/2000/svg";
+// Node widths at full size; narrow racks (phones) scale them down so the two
+// columns never overlap and a cable gap always remains between them.
 const SRC_W = 210;
 const INST_W = 132;
+const SRC_W_MIN = 118;
+const INST_W_MIN = 104;
 const SRC_H = 46;
 const INST_H = 34;
+const GROUP_H = 24;
 const GPAD = 16;
+// Touch screens get taller instrument rows: a finger needs ~36px to hit a port.
+const COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 // Minimum per-row slots: below these the rack grows past the viewport and
 // scrolls vertically instead of squeezing rows into unreadability.
 const MIN_SRC_SLOT = SRC_H + 10;
-const MIN_INST_SLOT = 24;
+const MIN_INST_SLOT = COARSE ? 38 : 24;
 
 export function PatchBay() {
   const view = patchViewSig.value;
@@ -36,7 +46,9 @@ export function PatchBay() {
         <h2>
           Patch bay{" "}
           <span class="hint-inline">
-            click a parameter then an instrument to connect (or drag) · click a cable to edit
+            {COARSE
+              ? "tap a parameter then an instrument to connect · tap a cable to edit"
+              : "click a parameter then an instrument to connect (or drag) · click a cable to edit"}
           </span>
         </h2>
         <div class="patch-views">
@@ -99,6 +111,7 @@ function RackGraph() {
 
   const hidden = patchViewSig.value === "orbit";
   connVersion.value; // subscribe: is-connected/is-off classes derive from connections
+  const collapsed = collapsedGroupsSig.value;
   const params = paramsList(); // reads gesturesSig → re-renders when moves change
 
   useEffect(() => {
@@ -278,7 +291,25 @@ function RackGraph() {
     // If a link is armed, this click lands it (or cancels).
     if (link.current && link.current.mode === "armed") {
       if (port && port.dataset.port !== link.current.fromType) completeLink(port);
-      else clearLink();
+      else if (port) clearLink();
+      else {
+        // Off a port: a tap cancels, but a swipe is the user scrolling the rack
+        // to reach an instrument further down — keep the link armed for that.
+        // (A touch scroll ends in pointercancel, never pointerup.)
+        const x0 = e.clientX;
+        const y0 = e.clientY;
+        const up = (ev: PointerEvent) => {
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", cancel);
+          if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) clearLink();
+        };
+        const cancel = () => {
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", cancel);
+        };
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", cancel);
+      }
       return;
     }
     if (port) {
@@ -309,16 +340,37 @@ function RackGraph() {
   // ---- Layout ------------------------------------------------------------------
   const H = size.h || 0;
   const W = size.w || 0;
+  const srcW = Math.round(Math.max(SRC_W_MIN, Math.min(SRC_W, W * 0.42)));
+  const instW = Math.round(Math.max(INST_W_MIN, Math.min(INST_W, W * 0.36)));
+  // Instrument column: a header per group, then its visible members (all of
+  // them when expanded; only the patched ones when collapsed).
+  const groups = INSTRUMENT_GROUPS.map((g) => {
+    const members = INSTRUMENTS.filter((i) => i.group === g.key);
+    return { ...g, members, shown: members.filter(instrumentVisible) };
+  });
+  const shownCount = groups.reduce((n, g) => n + g.shown.length, 0);
   // Content height: the viewport, or taller when rows need their minimum slot
   // (the .graph container scrolls vertically past that point).
   const CH = Math.max(
     H,
     GPAD * 2 + params.length * MIN_SRC_SLOT,
-    GPAD * 2 + INSTRUMENTS.length * MIN_INST_SLOT
+    GPAD * 2 + groups.length * GROUP_H + shownCount * MIN_INST_SLOT
   );
   const srcSlot = params.length ? (CH - GPAD * 2) / params.length : 0;
-  const instSlot = (CH - GPAD * 2) / INSTRUMENTS.length;
+  const instSlot = shownCount ? (CH - GPAD * 2 - groups.length * GROUP_H) / shownCount : 0;
   const ih = Math.max(18, Math.min(INST_H, instSlot - 4));
+  const instLeft = W - instW - GPAD;
+  const headerTop = new Map<string, number>();
+  const instTop = new Map<string, number>();
+  let y = GPAD;
+  for (const g of groups) {
+    headerTop.set(g.key, y);
+    y += GROUP_H;
+    for (const inst of g.shown) {
+      instTop.set(inst.key, y + (instSlot - ih) / 2);
+      y += instSlot;
+    }
+  }
   const usedSrc = new Set(
     Object.values(connections)
       .filter(Boolean)
@@ -337,7 +389,7 @@ function RackGraph() {
           key={p.key}
           class="gnode gnode--src"
           style={{
-            width: `${SRC_W}px`,
+            width: `${srcW}px`,
             left: `${GPAD}px`,
             top: `${GPAD + i * srcSlot + (srcSlot - SRC_H) / 2}px`,
             borderColor: p.color,
@@ -370,17 +422,41 @@ function RackGraph() {
           ></div>
         </div>
       ))}
-      {INSTRUMENTS.map((inst, i) => {
+      {groups.map((g) => {
+        const isCollapsed = !!collapsed[g.key];
+        const hiddenCount = g.members.length - g.shown.length;
+        return (
+          <button
+            key={"group:" + g.key}
+            class={`ggroup${isCollapsed ? " is-collapsed" : ""}`}
+            style={{
+              left: `${instLeft}px`,
+              top: `${headerTop.get(g.key)}px`,
+              width: `${instW}px`,
+              height: `${GROUP_H - 4}px`,
+            }}
+            title={`${g.label}: ${g.about} · ${isCollapsed ? `show all ${g.members.length}` : "click to fold away"}`}
+            aria-expanded={!isCollapsed}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => toggleGroup(g.key)}
+          >
+            <span class="ggroup-caret">{isCollapsed ? "▸" : "▾"}</span>
+            <span class="ggroup-label">{g.label}</span>
+            {isCollapsed && hiddenCount > 0 && <span class="ggroup-count">+{hiddenCount}</span>}
+          </button>
+        );
+      })}
+      {INSTRUMENTS.filter((inst) => instTop.has(inst.key)).map((inst) => {
         const on = !!connections[inst.key];
         return (
           <div
             key={inst.key}
             class={`gnode gnode--inst${on ? "" : " is-off"}`}
             style={{
-              width: `${INST_W}px`,
+              width: `${instW}px`,
               height: `${ih}px`,
-              left: `${W - INST_W - GPAD}px`,
-              top: `${GPAD + i * instSlot + (instSlot - ih) / 2}px`,
+              left: `${instLeft}px`,
+              top: `${instTop.get(inst.key)}px`,
             }}
           >
             <button
